@@ -1,0 +1,288 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "把鸿蒙手机变成电脑麦克风"
+    },
+    {
+      "name": "permission_microphone_reason",
+      "value": "MicYou 需要采集本机麦克风的声音，并发送到电脑上的桌面端。"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "MicYou 音频推流"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_title",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_subtitle",
+      "value": "把本机麦克风采集的声音送到 MicYou 桌面端"
+    },
+    {
+      "name": "discovered_header",
+      "value": "发现的服务器"
+    },
+    {
+      "name": "discovered_empty",
+      "value": "还没有发现服务器。请先在电脑上启动桌面端，并保证两台设备在同一个局域网。"
+    },
+    {
+      "name": "manual_header",
+      "value": "手动连接"
+    },
+    {
+      "name": "host_hint",
+      "value": "服务器地址"
+    },
+    {
+      "name": "port_hint",
+      "value": "TCP 端口"
+    },
+    {
+      "name": "connect",
+      "value": "连接"
+    },
+    {
+      "name": "stop",
+      "value": "停止"
+    },
+    {
+      "name": "mute",
+      "value": "静音"
+    },
+    {
+      "name": "refresh",
+      "value": "重新搜索"
+    },
+    {
+      "name": "last_header",
+      "value": "上次连接"
+    },
+    {
+      "name": "history_header",
+      "value": "连接历史"
+    },
+    {
+      "name": "history_empty",
+      "value": "暂无历史记录。连接一次后，设备会记住在这里。"
+    },
+    {
+      "name": "clear_history",
+      "value": "清空历史"
+    },
+    {
+      "name": "delete",
+      "value": "删除"
+    },
+    {
+      "name": "auto_connect",
+      "value": "自动连接"
+    },
+    {
+      "name": "auto_connect_hint",
+      "value": "打开应用后自动连接上次的设备"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "section_connection",
+      "value": "连接"
+    },
+    {
+      "name": "section_appearance",
+      "value": "外观"
+    },
+    {
+      "name": "theme_mode",
+      "value": "主题"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "theme_light",
+      "value": "浅色"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "lang_mode",
+      "value": "语言"
+    },
+    {
+      "name": "lang_restart_hint",
+      "value": "重启应用后语言生效。"
+    },
+    {
+      "name": "lang_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "lang_en",
+      "value": "English"
+    },
+    {
+      "name": "lang_zh_cn",
+      "value": "简体中文"
+    },
+    {
+      "name": "lang_zh_tw",
+      "value": "繁體中文"
+    },
+    {
+      "name": "section_audio",
+      "value": "音频"
+    },
+    {
+      "name": "channel_mode",
+      "value": "声道"
+    },
+    {
+      "name": "channel_mode_hint",
+      "value": "下次连接时生效。双声道仍在测试中。"
+    },
+    {
+      "name": "channel_mono",
+      "value": "单声道"
+    },
+    {
+      "name": "channel_stereo",
+      "value": "双声道"
+    },
+    {
+      "name": "source_mode",
+      "value": "录音来源"
+    },
+    {
+      "name": "audio_applies_hint",
+      "value": "下次连接时生效。"
+    },
+    {
+      "name": "source_mic",
+      "value": "麦克风（默认）"
+    },
+    {
+      "name": "source_voice_comm",
+      "value": "通话"
+    },
+    {
+      "name": "source_voice_recog",
+      "value": "语音识别"
+    },
+    {
+      "name": "source_camcorder",
+      "value": "摄像机"
+    },
+    {
+      "name": "source_unprocessed",
+      "value": "原始（无处理）"
+    },
+    {
+      "name": "source_live",
+      "value": "直播"
+    },
+    {
+      "name": "sample_rate_mode",
+      "value": "采样率"
+    },
+    {
+      "name": "bitdepth_mode",
+      "value": "位深"
+    },
+    {
+      "name": "bitdepth_hint",
+      "value": "24-bit 与 32-bit 浮点为实验项；设备不支持时自动回退到 16-bit。"
+    },
+    {
+      "name": "codec_mode",
+      "value": "编码"
+    },
+    {
+      "name": "codec_pcm",
+      "value": "PCM"
+    },
+    {
+      "name": "codec_opus",
+      "value": "Opus"
+    },
+    {
+      "name": "codec_opus_hint",
+      "value": "Opus 尚未在手机端实现，暂不可选。"
+    },
+    {
+      "name": "section_about",
+      "value": "关于"
+    },
+    {
+      "name": "scanning",
+      "value": "扫描中…"
+    },
+    {
+      "name": "live",
+      "value": "LIVE"
+    },
+    {
+      "name": "unmute",
+      "value": "取消静音"
+    },
+    {
+      "name": "status_idle",
+      "value": "未连接"
+    },
+    {
+      "name": "status_connecting",
+      "value": "连接中"
+    },
+    {
+      "name": "status_streaming",
+      "value": "推流中"
+    },
+    {
+      "name": "status_failed",
+      "value": "已断开"
+    },
+    {
+      "name": "stats_header",
+      "value": "链路质量"
+    },
+    {
+      "name": "stats_rtt",
+      "value": "往返时延"
+    },
+    {
+      "name": "stats_jitter",
+      "value": "抖动"
+    },
+    {
+      "name": "stats_loss",
+      "value": "丢包率"
+    },
+    {
+      "name": "stats_latency",
+      "value": "端到端延迟"
+    },
+    {
+      "name": "stats_packets",
+      "value": "已发包数"
+    },
+    {
+      "name": "error_header",
+      "value": "错误"
+    },
+    {
+      "name": "notice",
+      "value": "音频以未压缩的 PCM 发送（默认 48 kHz 单声道，采样率、声道和位深可在设置中调整）。降噪和回声消除都在桌面端完成，手机只负责采集和发送。"
+    }
+  ]
+}

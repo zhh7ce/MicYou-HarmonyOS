@@ -1,0 +1,67 @@
+{
+  "app": {
+    // Copy this file to build-profile.json5, which .gitignore keeps out of git:
+    //
+    //   cp build-profile.example.json5 build-profile.json5
+    //
+    // The signingConfigs block below is the real shape with placeholders where your own
+    // material goes. Do not type those values in by hand — let DevEco Studio write them:
+    // File > Project Structure > Project > Signing Configs, tick "Automatically generate
+    // signature", sign in with your Huawei developer account. DevEco puts a
+    // .cer/.p7b/.p12 triple in ~/.ohos/config/, fills the three paths in here, and fills
+    // keyPassword and storePassword with blobs that only decrypt on your machine.
+    //
+    // A profile is bound to one bundleName (AppScope/app.json5, com.zhh7ce.micyou.hmos),
+    // so renaming the bundle needs a fresh automatic-signing run.
+    //
+    // Leaving signingConfigs as an empty array still builds: assembleHap then produces an
+    // unsigned HAP, which cannot be installed on a phone. Building with the placeholders
+    // below left in place fails at the signing step.
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/home/YOU/.ohos/config/YOUR_CERT.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "REPLACE_WITH_DEVECO_ENCRYPTED_KEY_PASSWORD",
+          "profile": "/home/YOU/.ohos/config/YOUR_PROFILE.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/home/YOU/.ohos/config/YOUR_KEYSTORE.p12",
+          "storePassword": "REPLACE_WITH_DEVECO_ENCRYPTED_STORE_PASSWORD"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "targetSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

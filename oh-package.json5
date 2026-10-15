@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "micyou-harmonyos",
+  "version": "0.1.0",
+  "description": "HarmonyOS NEXT client that streams the phone microphone to a MicYou desktop server.",
+  "author": "zhh7ce",
+  "license": "GPL-3.0-or-later",
+  "repository": "https://github.com/zhh7ce/MicYou-HarmonyOS",
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}

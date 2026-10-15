@@ -1,0 +1,288 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Use a HarmonyOS phone as a PC microphone"
+    },
+    {
+      "name": "permission_microphone_reason",
+      "value": "MicYou records from this phone's microphone and streams it to your computer."
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "MicYou streamer"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_title",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_subtitle",
+      "value": "Stream this phone's microphone to a MicYou desktop server"
+    },
+    {
+      "name": "discovered_header",
+      "value": "Discovered servers"
+    },
+    {
+      "name": "discovered_empty",
+      "value": "No server found yet. Start the desktop app and keep both devices on the same network."
+    },
+    {
+      "name": "manual_header",
+      "value": "Connect manually"
+    },
+    {
+      "name": "host_hint",
+      "value": "Server address"
+    },
+    {
+      "name": "port_hint",
+      "value": "TCP port"
+    },
+    {
+      "name": "connect",
+      "value": "Connect"
+    },
+    {
+      "name": "stop",
+      "value": "Stop"
+    },
+    {
+      "name": "mute",
+      "value": "Mute"
+    },
+    {
+      "name": "refresh",
+      "value": "Rescan"
+    },
+    {
+      "name": "last_header",
+      "value": "Last connected"
+    },
+    {
+      "name": "history_header",
+      "value": "Connection history"
+    },
+    {
+      "name": "history_empty",
+      "value": "No history yet. Connect once and the device will be remembered here."
+    },
+    {
+      "name": "clear_history",
+      "value": "Clear history"
+    },
+    {
+      "name": "delete",
+      "value": "Delete"
+    },
+    {
+      "name": "auto_connect",
+      "value": "Auto-connect"
+    },
+    {
+      "name": "auto_connect_hint",
+      "value": "Reconnect to the last device automatically when the app opens"
+    },
+    {
+      "name": "settings_title",
+      "value": "Settings"
+    },
+    {
+      "name": "section_connection",
+      "value": "Connection"
+    },
+    {
+      "name": "section_appearance",
+      "value": "Appearance"
+    },
+    {
+      "name": "theme_mode",
+      "value": "Theme"
+    },
+    {
+      "name": "theme_system",
+      "value": "System"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark"
+    },
+    {
+      "name": "lang_mode",
+      "value": "Language"
+    },
+    {
+      "name": "lang_restart_hint",
+      "value": "Restart the app to apply the language."
+    },
+    {
+      "name": "lang_system",
+      "value": "System default"
+    },
+    {
+      "name": "lang_en",
+      "value": "English"
+    },
+    {
+      "name": "lang_zh_cn",
+      "value": "简体中文"
+    },
+    {
+      "name": "lang_zh_tw",
+      "value": "繁體中文"
+    },
+    {
+      "name": "section_audio",
+      "value": "Audio"
+    },
+    {
+      "name": "channel_mode",
+      "value": "Channels"
+    },
+    {
+      "name": "channel_mode_hint",
+      "value": "Applies to the next session. Stereo is still experimental."
+    },
+    {
+      "name": "channel_mono",
+      "value": "Mono"
+    },
+    {
+      "name": "channel_stereo",
+      "value": "Stereo"
+    },
+    {
+      "name": "source_mode",
+      "value": "Audio source"
+    },
+    {
+      "name": "audio_applies_hint",
+      "value": "Applies to the next session."
+    },
+    {
+      "name": "source_mic",
+      "value": "Mic (default)"
+    },
+    {
+      "name": "source_voice_comm",
+      "value": "Voice call"
+    },
+    {
+      "name": "source_voice_recog",
+      "value": "Voice recognition"
+    },
+    {
+      "name": "source_camcorder",
+      "value": "Camcorder"
+    },
+    {
+      "name": "source_unprocessed",
+      "value": "Unprocessed (raw)"
+    },
+    {
+      "name": "source_live",
+      "value": "Live broadcast"
+    },
+    {
+      "name": "sample_rate_mode",
+      "value": "Sample rate"
+    },
+    {
+      "name": "bitdepth_mode",
+      "value": "Bit depth"
+    },
+    {
+      "name": "bitdepth_hint",
+      "value": "24-bit and 32-bit float are experimental. Falls back to 16-bit if the device refuses."
+    },
+    {
+      "name": "codec_mode",
+      "value": "Codec"
+    },
+    {
+      "name": "codec_pcm",
+      "value": "PCM"
+    },
+    {
+      "name": "codec_opus",
+      "value": "Opus"
+    },
+    {
+      "name": "codec_opus_hint",
+      "value": "Opus is not implemented on-device yet, so it stays unavailable."
+    },
+    {
+      "name": "section_about",
+      "value": "About"
+    },
+    {
+      "name": "scanning",
+      "value": "Scanning…"
+    },
+    {
+      "name": "live",
+      "value": "LIVE"
+    },
+    {
+      "name": "unmute",
+      "value": "Unmute"
+    },
+    {
+      "name": "status_idle",
+      "value": "Idle"
+    },
+    {
+      "name": "status_connecting",
+      "value": "Connecting"
+    },
+    {
+      "name": "status_streaming",
+      "value": "Streaming"
+    },
+    {
+      "name": "status_failed",
+      "value": "Disconnected"
+    },
+    {
+      "name": "stats_header",
+      "value": "Link quality"
+    },
+    {
+      "name": "stats_rtt",
+      "value": "RTT"
+    },
+    {
+      "name": "stats_jitter",
+      "value": "Jitter"
+    },
+    {
+      "name": "stats_loss",
+      "value": "Packet loss"
+    },
+    {
+      "name": "stats_latency",
+      "value": "Latency"
+    },
+    {
+      "name": "stats_packets",
+      "value": "Packets sent"
+    },
+    {
+      "name": "error_header",
+      "value": "Error"
+    },
+    {
+      "name": "notice",
+      "value": "Audio is sent as uncompressed PCM (48 kHz mono by default; sample rate, channels and bit depth are adjustable in Settings). Noise suppression and echo cancellation run on the desktop, so the phone only records and sends."
+    }
+  ]
+}

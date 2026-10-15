@@ -1,0 +1,288 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "把鴻蒙手機變成電腦麥克風"
+    },
+    {
+      "name": "permission_microphone_reason",
+      "value": "MicYou 需要擷取本機麥克風的聲音，並傳送到電腦上的桌面端。"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "MicYou 音訊推流"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_title",
+      "value": "MicYou"
+    },
+    {
+      "name": "page_subtitle",
+      "value": "把本機麥克風採集的聲音送到 MicYou 桌面端"
+    },
+    {
+      "name": "discovered_header",
+      "value": "發現的伺服器"
+    },
+    {
+      "name": "discovered_empty",
+      "value": "還沒有發現伺服器。請先在電腦上啟動桌面端，並確認兩台裝置在同一個區域網路。"
+    },
+    {
+      "name": "manual_header",
+      "value": "手動連線"
+    },
+    {
+      "name": "host_hint",
+      "value": "伺服器位址"
+    },
+    {
+      "name": "port_hint",
+      "value": "TCP 連接埠"
+    },
+    {
+      "name": "connect",
+      "value": "連線"
+    },
+    {
+      "name": "stop",
+      "value": "停止"
+    },
+    {
+      "name": "mute",
+      "value": "靜音"
+    },
+    {
+      "name": "refresh",
+      "value": "重新搜尋"
+    },
+    {
+      "name": "last_header",
+      "value": "上次連線"
+    },
+    {
+      "name": "history_header",
+      "value": "連線歷史"
+    },
+    {
+      "name": "history_empty",
+      "value": "尚無歷史紀錄。連線一次後，裝置會記住在這裡。"
+    },
+    {
+      "name": "clear_history",
+      "value": "清空歷史"
+    },
+    {
+      "name": "delete",
+      "value": "刪除"
+    },
+    {
+      "name": "auto_connect",
+      "value": "自動連線"
+    },
+    {
+      "name": "auto_connect_hint",
+      "value": "開啟應用後自動連線上次的裝置"
+    },
+    {
+      "name": "settings_title",
+      "value": "設定"
+    },
+    {
+      "name": "section_connection",
+      "value": "連線"
+    },
+    {
+      "name": "section_appearance",
+      "value": "外觀"
+    },
+    {
+      "name": "theme_mode",
+      "value": "主題"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟隨系統"
+    },
+    {
+      "name": "theme_light",
+      "value": "淺色"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "lang_mode",
+      "value": "語言"
+    },
+    {
+      "name": "lang_restart_hint",
+      "value": "重啟應用後語言生效。"
+    },
+    {
+      "name": "lang_system",
+      "value": "跟隨系統"
+    },
+    {
+      "name": "lang_en",
+      "value": "English"
+    },
+    {
+      "name": "lang_zh_cn",
+      "value": "简体中文"
+    },
+    {
+      "name": "lang_zh_tw",
+      "value": "繁體中文"
+    },
+    {
+      "name": "section_audio",
+      "value": "音訊"
+    },
+    {
+      "name": "channel_mode",
+      "value": "聲道"
+    },
+    {
+      "name": "channel_mode_hint",
+      "value": "下次連線時生效。雙聲道仍在測試中。"
+    },
+    {
+      "name": "channel_mono",
+      "value": "單聲道"
+    },
+    {
+      "name": "channel_stereo",
+      "value": "雙聲道"
+    },
+    {
+      "name": "source_mode",
+      "value": "錄音來源"
+    },
+    {
+      "name": "audio_applies_hint",
+      "value": "下次連線時生效。"
+    },
+    {
+      "name": "source_mic",
+      "value": "麥克風（預設）"
+    },
+    {
+      "name": "source_voice_comm",
+      "value": "通話"
+    },
+    {
+      "name": "source_voice_recog",
+      "value": "語音辨識"
+    },
+    {
+      "name": "source_camcorder",
+      "value": "攝影機"
+    },
+    {
+      "name": "source_unprocessed",
+      "value": "原始（無處理）"
+    },
+    {
+      "name": "source_live",
+      "value": "直播"
+    },
+    {
+      "name": "sample_rate_mode",
+      "value": "取樣率"
+    },
+    {
+      "name": "bitdepth_mode",
+      "value": "位元深度"
+    },
+    {
+      "name": "bitdepth_hint",
+      "value": "24-bit 與 32-bit 浮點為實驗項目；裝置不支援時自動退回 16-bit。"
+    },
+    {
+      "name": "codec_mode",
+      "value": "編碼"
+    },
+    {
+      "name": "codec_pcm",
+      "value": "PCM"
+    },
+    {
+      "name": "codec_opus",
+      "value": "Opus"
+    },
+    {
+      "name": "codec_opus_hint",
+      "value": "Opus 尚未在手機端實作，暫不可選。"
+    },
+    {
+      "name": "section_about",
+      "value": "關於"
+    },
+    {
+      "name": "scanning",
+      "value": "搜尋中…"
+    },
+    {
+      "name": "live",
+      "value": "LIVE"
+    },
+    {
+      "name": "unmute",
+      "value": "取消靜音"
+    },
+    {
+      "name": "status_idle",
+      "value": "未連線"
+    },
+    {
+      "name": "status_connecting",
+      "value": "連線中"
+    },
+    {
+      "name": "status_streaming",
+      "value": "推流中"
+    },
+    {
+      "name": "status_failed",
+      "value": "已中斷"
+    },
+    {
+      "name": "stats_header",
+      "value": "鏈路品質"
+    },
+    {
+      "name": "stats_rtt",
+      "value": "往返時延"
+    },
+    {
+      "name": "stats_jitter",
+      "value": "抖動"
+    },
+    {
+      "name": "stats_loss",
+      "value": "丟包率"
+    },
+    {
+      "name": "stats_latency",
+      "value": "端到端延遲"
+    },
+    {
+      "name": "stats_packets",
+      "value": "已送封包數"
+    },
+    {
+      "name": "error_header",
+      "value": "錯誤"
+    },
+    {
+      "name": "notice",
+      "value": "音訊以未壓縮的 PCM 傳送（預設 48 kHz 單聲道，取樣率、聲道與位元深度可在設定中調整）。降噪與回音消除都在桌面端完成，手機只負責採集與傳送。"
+    }
+  ]
+}

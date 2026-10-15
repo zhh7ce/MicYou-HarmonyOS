@@ -1,0 +1,10 @@
+{
+  "name": "entry",
+  "version": "0.1.0",
+  "description": "MicYou HarmonyOS client: capture, encode and stream microphone audio to the desktop server.",
+  "main": "",
+  "author": "zhh7ce",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {}
+}
+
