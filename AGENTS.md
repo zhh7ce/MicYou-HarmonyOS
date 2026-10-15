@@ -342,9 +342,40 @@ and writes no report, because `/opt/devecostudio/tools/codelinter/linter/result/
 
 ## Tests
 
-None in the project. `entry/src/` contains only `main` — no `ohosTest`, no `test`,
-and no test runner wiring. Verification is a build plus a manual pass on a real
-phone.
+`entry/src/` has no `ohosTest` and no unit-test wiring: the ArkTS side is verified by
+building, plus by the harness under `test/`, which drives a real phone and checks the
+wire rather than the code.
+
+```bash
+export DEVECO_SDK_HOME=/opt/devecostudio/sdk
+test/run.sh --list          # catalogue, does not touch the phone
+test/run.sh --auto          # unattended tier
+test/run.sh --human         # observation tier, needs an interactive terminal
+test/selfcheck.sh           # proves the harness itself, no phone, no desktop
+```
+
+The two tiers are a deliberate split. The auto tier taps the phone through `uitest`
+against the dumped widget tree (never hardcoded coordinates; chips are found by label,
+the FAB by area, the gear by geometry), runs against `test/lib/receiver.py` — a fake
+desktop on 8555/8556 that answers the handshake, pings every 500 ms and mirrors
+`validate_audio_packet` from the desktop's `transport/session.rs` — then gates the
+capture: sequence continuity, header equality, packet rate, one parity per twelve data
+packets, each parity recomputed as the XOR of its group, and every Opus packet decoded
+in order by the system libopus through ctypes. What that tier cannot decide is the
+human tier: real-desktop interop, FEC recovery under injected loss, and anything an
+ear or an eye has to judge. `test/README.md` carries the case catalogue, the
+environment overrides, and the explicit list of what a green auto tier does not prove.
+
+`test/selfcheck.sh` is the gate on the gates: four clean profiles must pass every
+assertion, and six seeded defects (bad XOR, parity sequence, declared lengths, group
+start, header rate, PCM payload size) must each trip exactly the gate that owns them,
+with an empty capture still reported as a failure. Run it after touching anything in
+`test/lib/`.
+
+Cases whose header comment says `disruptive` (app force-stop, screen suspend) are
+skipped unless `--allow-disruptive`. Artifacts land in `test/results/<stamp>/`,
+gitignored: per-case `capture.jsonl`, `app.log`, `receiver.log`, layout snapshots, and
+`human.log` for the observed verdicts.
 
 Out of tree, the proto3 codec was round-tripped against `network.proto` with
 protobufjs as an independent parser: field numbers, wire types and the emitted bytes

@@ -56,10 +56,22 @@ depend on a protobuf runtime.
 
 ## Checking your change
 
-There is no automated test suite. A change is verified by a clean build plus a manual run
-on a real phone against a desktop server (`cargo run -p micyou-cli -- serve` in the
-desktop repository is the quickest way to get one). Install, log and layout-dump commands
-are in [AGENTS.md](AGENTS.md), section "Debug loop".
+There is no in-project unit test (`entry/src/` has no `ohosTest`), but the wire path is
+automated under `test/`:
+
+```bash
+test/run.sh --auto      # unattended: taps the phone, fake desktop, decodes the capture
+test/run.sh --human     # observation points: real desktop GUI, ears and eyes
+test/selfcheck.sh       # the harness itself, needs neither phone nor desktop
+```
+
+A change is verified by a clean build plus the auto tier against a real phone, and by
+the human tier wherever the claim needs the real desktop (the catalogue, the
+environment overrides and the limits of the auto tier are in
+[`test/README.md`](test/README.md)). For a hand-started server,
+`cargo run -p micyou-cli -- serve` in the desktop repository is the quickest way to get
+one. Install, log and layout-dump commands are in [AGENTS.md](AGENTS.md), section
+"Debug loop".
 
 If you touch `net/Pb.ets` or any field number in `net/Messages.ets`, re-run the codec
 against an independent protobuf parser (protobufjs in a scratch directory — it is not a

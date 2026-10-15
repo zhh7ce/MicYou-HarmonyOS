@@ -29,6 +29,13 @@ entry/src/main/cpp/
                 napi_init.cpp        napi 模块 libmcyopus.so：libopus 编码器句柄槽位 + 20 ms 帧编码
                 CMakeLists.txt       add_subdirectory 引入 git 子模块 lib/opus（v1.5.2，BSD-3），编译选项在文件内 FORCE 固定
                 types/libmcyopus/    index.d.ts 类型声明，供 ArkTS 侧 import
+test/           run.sh               两层回归测试入口（--auto 无人值守 / --human 需要观察）
+                  selfcheck.sh       框架自检：假手机发流 + 逐条注入缺陷，证明每个门限真会失败
+                  lib/               env.sh 工具链与端口 / device.sh 点手机 / settings.sh 点设置页
+                                     qlayout.py 查控件树 / wire.py 桌面端校验规则镜像
+                                     receiver.py 假桌面端 / analyze.py 断言 / fakephone.py 发流对拍
+                  cases/auto/        a01…a12，不需要人看
+                  cases/human/       h01…h03，需要人看
 ```
 
 单 `entry` HAP 模块：ArkTS 加一个 napi native 模块（`libmcyopus.so`，封装 libopus）。没有第三方 ArkTS 运行时依赖——`entry/oh-package.json5` 只登记本地类型包 `libmcyopus.so`；proto3 编解码仍是自己在 `net/Pb.ets` 里实现的，不引入 protobuf 运行时。唯一的 native C 依赖是 libopus（BSD-3），以 git 子模块形式跟踪在 `lib/opus`，锁定 v1.5.2。bundleName 为 `com.zhh7ce.micyou.hmos`，`vendor` 为 `zhh7ce`。
@@ -80,6 +87,17 @@ hvigorw assembleHap --no-daemon
 ```
 
 产物在 `entry/build/default/outputs/default/`：`entry-default-signed.hap` 可以装机；`entry-default-unsigned.hap` 装不上。装机、抓日志、UI 布局 dump 见 `AGENTS.md` 的 "Debug loop"。
+
+## 测试
+
+`test/` 是 Opus 推流链路的回归测试，分两层，按你当时有没有空来选：
+
+- `test/run.sh --auto`：不需要人看着。脚本自己通过 `uitest` 点手机（一律查控件树，不写死坐标），自己用 `test/lib/receiver.py` 扮桌面端（握手、每 500 ms 一次 ping、端口 8555/8556，不抢真实 GUI 的 8554），然后按桌面端 `validate_audio_packet` 同一套规则校验每一个抓到的包，并断言序号连续、包头与所选 profile 一致、包速率相符（Opus 20 ms → 50 pkt/s）、每 12 个数据包出一个 XOR 奇偶包且奇偶体重算相等、整条 Opus 流能被系统 libopus 按序解码。跑完输出 PASS/FAIL 汇总。
+- `test/run.sh --human`：需要人观察。手机侧操作照做，只在观察点停下来打印该看什么，等你输入 pass / fail / skip，结论追加在 `test/results/<时间戳>/human.log`。真实桌面端互操作、注入丢包下的 FEC 恢复、听感和界面观感，都在这一层。
+
+`test/selfcheck.sh` 不碰手机也不碰桌面端，验的是测试框架自己：四条完全正确的流必须全绿，六种逐条注入的缺陷必须各自只打中属于它的那个门限，空流必须判红。改过 `test/lib/` 之后先跑它。
+
+用例清单、环境变量、加用例的模板，以及 auto 层全绿仍然证明不了哪些事，写在 `test/README.md`。
 
 ## 线协议
 
@@ -140,7 +158,7 @@ hvigorw assembleHap --no-daemon
 
 ## 如何参与
 
-环境准备、构建与签名、代码风格、提交规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；装机调试与真机验证的具体命令见 [`AGENTS.md`](AGENTS.md) 的 "Debug loop"。项目没有自动化测试，验收标准是一次干净构建加一轮真机对测。
+环境准备、构建与签名、代码风格、提交规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；装机调试与真机验证的具体命令见 [`AGENTS.md`](AGENTS.md) 的 "Debug loop"。回归测试在 `test/`，无人值守层直接跑 `test/run.sh --auto`，需要人观察的一层跑 `test/run.sh --human`；ArkTS 侧仍然没有单元测试，一次干净构建是最低门槛。
 
 问题反馈用仓库的 issue 模板（`.github/ISSUE_TEMPLATE/`）：bug 模板会要求填手机型号、应用版本、桌面端版本、采集设置和 `MicYouEngine` / `MicYouControl` / `MicYouCapture` 三个 tag 的日志片段；涉及线协议字段的请求请在 issue 里先说明，因为这类改动要桌面端和安卓端一起跟。
 
