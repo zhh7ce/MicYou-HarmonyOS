@@ -119,9 +119,7 @@ const RATE_CHOICES: Array<TextChoice> = [
 
 const CODEC_CHOICES: Array<CodecChoice> = [
   { value: CODEC_PCM, label: $r('app.string.codec_pcm'), available: true },
-  // Opus needs the on-device encoder (TODO 4.3); shown disabled so the choice is
-  // visible without becoming a control that would push an undecodable stream.
-  { value: CODEC_OPUS, label: $r('app.string.codec_opus'), available: false }
+  { value: CODEC_OPUS, label: $r('app.string.codec_opus'), available: true }
 ];
 
 @Component

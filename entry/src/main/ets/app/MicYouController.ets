@@ -27,8 +27,11 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AudioSender } from '../net/AudioSender';
 import { ControlClient } from '../net/ControlClient';
 import { encodeAudioPacket, InboundKind, InboundMessage } from '../net/Messages';
-import { udpPortFor } from '../net/Wire';
+import { udpPortFor, CODEC_PCM, CODEC_OPUS, AUDIO_FORMAT_16BIT, isOpusNativeRate } from '../net/Wire';
 import { CaptureApplied, CaptureConfig, CapturePump } from '../audio/CapturePump';
+import { FecGroup } from '../audio/FecGroup';
+import { OpusBridge } from '../audio/OpusBridge';
+import { OpusFrameBuffer } from '../audio/OpusFrameBuffer';
 import { BackgroundRunner } from './BackgroundRunner';
 import { ensureMicrophone } from './PermissionGate';
 import { ConnectionStore } from './ConnectionStore';
@@ -79,6 +82,14 @@ export class MicYouController {
   private capChannels: number = 1;
   private capFormat: number = 2;
   private capCodec: number = 0;
+  // Opus send path: one native encoder handle, the 20 ms frame accumulator and
+  // the XOR FEC group. All three are armed per session in start()/torn down in
+  // teardown(); encode calls stay on this (main) JS thread — the napi module
+  // keeps global slots with no locking.
+  private readonly encoder: OpusBridge = new OpusBridge();
+  private readonly frameBuffer: OpusFrameBuffer = new OpusFrameBuffer();
+  private readonly fecGroup: FecGroup = new FecGroup();
+  private opusMode: boolean = false;
   private watchdog: number = -1;
   private observer: SnapshotHandler | null = null;
   private stopping: boolean = false;
@@ -108,6 +119,12 @@ export class MicYouController {
     this.audioOut = new AudioSender();
     this.sessionCounter += 1;
     this.sequence = 0;
+    // Clear any residue from a session that ended abnormally; destroy() on an
+    // empty encoder handle is a no-op.
+    this.opusMode = false;
+    this.fecGroup.reset();
+    this.frameBuffer.reset();
+    this.encoder.destroy();
     const sessionId: number = this.sessionCounter;
     const peer: string = `${host}:${tcpPort}`;
 
@@ -131,15 +148,29 @@ export class MicYouController {
         audioFormat: settings.audioFormat,
         sourceType: settings.sourceType
       };
-      // Opus is not implemented on-device yet (TODO 4.3), so the wire codec stays
-      // PCM regardless of the stored setting; the UI keeps the Opus choice disabled.
+      const wantOpus: boolean = settings.codec === CODEC_OPUS;
+      if (wantOpus && (!isOpusNativeRate(config.sampleRate) || config.audioFormat !== AUDIO_FORMAT_16BIT)) {
+        hilog.warn(DOMAIN, TAG, 'opus config clamped from %{public}d/fmt%{public}d to 48000/16-bit',
+          config.sampleRate, config.audioFormat);
+        config.sampleRate = 48000;
+        config.audioFormat = AUDIO_FORMAT_16BIT;
+      }
       const applied: CaptureApplied = await this.pump.start(
         (payload: Uint8Array) => this.onPcm(payload, sessionId),
         (level: number) => this.onLevel(level), config);
       this.capSampleRate = applied.sampleRate;
       this.capChannels = applied.channels;
       this.capFormat = applied.audioFormat;
-      this.capCodec = 0;
+      this.opusMode = wantOpus;
+      if (this.opusMode) {
+        // 钳制只保证请求值合法；applied 回退不改采样率、并把位深归到 16-bit，故此处必然合法。
+        this.encoder.create(applied.sampleRate, applied.channels);
+        this.frameBuffer.start(applied.sampleRate, applied.channels);
+        this.fecGroup.reset();
+        this.capCodec = CODEC_OPUS;
+      } else {
+        this.capCodec = CODEC_PCM;
+      }
       this.setPhase(EnginePhase.Streaming, peer, '');
       this.startWatchdog();
       // Record only a real success, so a mistyped manual address never pollutes
@@ -172,6 +203,9 @@ export class MicYouController {
   private async teardown(): Promise<void> {
     this.stopWatchdog();
     await this.pump.stop();
+    this.frameBuffer.reset();
+    this.fecGroup.reset();
+    this.encoder.destroy();
     this.audioOut.stop();
     await this.background.stop();
     this.control.close();
@@ -181,11 +215,27 @@ export class MicYouController {
     if (this.snapshot.phase !== EnginePhase.Streaming) {
       return;
     }
+    if (this.opusMode) {
+      this.frameBuffer.feed(payload, (frame: ArrayBuffer) => this.onOpusFrame(frame, sessionId));
+      return;
+    }
     const frame: ArrayBuffer = encodeAudioPacket(payload, this.sequence, Date.now(), sessionId,
       this.capSampleRate, this.capChannels, this.capFormat, this.capCodec);
     this.sequence += 1;
     this.audioOut.send(new Uint8Array(frame));
     this.snapshot.packetsSent += 1;
+  }
+
+  private onOpusFrame(frame: ArrayBuffer, sessionId: number): void {
+    const packet: Uint8Array = new Uint8Array(this.encoder.encode(frame));
+    const seq: number = this.sequence;
+    this.sequence += 1;
+    const data: ArrayBuffer = encodeAudioPacket(packet, seq, Date.now(), sessionId,
+      this.capSampleRate, this.capChannels, this.capFormat, CODEC_OPUS);
+    this.audioOut.send(new Uint8Array(data));
+    this.snapshot.packetsSent += 1;
+    // FEC 消费在 Task 6；这里先返回值丢弃。
+    this.fecGroup.add(packet, seq);
   }
 
   private onLevel(level: number): void {
