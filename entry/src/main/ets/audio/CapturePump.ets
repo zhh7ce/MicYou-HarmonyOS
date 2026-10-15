@@ -270,13 +270,17 @@ export class CapturePump {
   async stop(): Promise<void> {
     const capturer = this.capturer;
     this.capturer = null;
-    this.sink = null;
-    this.levelSink = null;
     if (capturer === null) {
+      this.sink = null;
+      this.levelSink = null;
       return;
     }
-    this.flush();
     capturer.off('readData', this.readListener);
+    // Flush before clearing the sinks: with the sink already nulled the tail
+    // emit is a no-op and up to one payload of audio disappears on every stop.
+    this.flush();
+    this.sink = null;
+    this.levelSink = null;
     try {
       await capturer.stop();
     } catch (err) {
