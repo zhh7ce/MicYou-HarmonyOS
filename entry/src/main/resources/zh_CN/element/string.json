@@ -218,7 +218,7 @@
     },
     {
       "name": "codec_opus_hint",
-      "value": "Opus 尚未在手机端实现，暂不可选。"
+      "value": "Opus 以 20 毫秒 VOIP 帧编码并附带 FEC，采样率与位深会限制到兼容组合。"
     },
     {
       "name": "section_about",

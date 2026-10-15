@@ -218,7 +218,7 @@
     },
     {
       "name": "codec_opus_hint",
-      "value": "Opus is not implemented on-device yet, so it stays unavailable."
+      "value": "Opus encodes 20 ms VOIP frames with FEC; capture choices narrow to compatible rates."
     },
     {
       "name": "section_about",

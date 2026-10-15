@@ -41,7 +41,8 @@ import {
   SOURCE_MIC,
   SOURCE_UNPROCESSED,
   SOURCE_VOICE_COMMUNICATION,
-  SOURCE_VOICE_RECOGNITION
+  SOURCE_VOICE_RECOGNITION,
+  isOpusNativeRate
 } from '../net/Wire';
 
 interface ThemeChoice {
@@ -71,6 +72,16 @@ interface CodecChoice {
   value: number;
   label: Resource;
   available: boolean;
+}
+
+interface RateChipArgs {
+  choice: TextChoice;
+  disabled: boolean;
+}
+
+interface BitDepthChipArgs {
+  choice: TextChoice;
+  disabled: boolean;
 }
 
 const THEME_CHOICES: Array<ThemeChoice> = [
@@ -238,7 +249,28 @@ export struct SettingsView {
     }
     this.codec = value;
     ConnectionStore.shared.setCodec(value);
+    if (value === CODEC_OPUS) {
+      // Migrate an already-stored choice Opus cannot encode; the controller
+      // would clamp it at session start anyway, so the UI must not keep
+      // showing a value that is not in effect.
+      if (!isOpusNativeRate(this.sampleRate)) {
+        this.sampleRate = 48000;
+        ConnectionStore.shared.setSampleRate(48000);
+      }
+      if (this.audioFormat !== AUDIO_FORMAT_16BIT) {
+        this.audioFormat = AUDIO_FORMAT_16BIT;
+        ConnectionStore.shared.setAudioFormat(AUDIO_FORMAT_16BIT);
+      }
+    }
     this.refresh();
+  }
+
+  private opusLockedRate(value: number): boolean {
+    return this.codec === CODEC_OPUS && !isOpusNativeRate(value);
+  }
+
+  private opusLockedFormat(value: number): boolean {
+    return this.codec === CODEC_OPUS && value !== AUDIO_FORMAT_16BIT;
   }
 
   private removeEntry(host: string, port: number): void {
@@ -336,29 +368,41 @@ export struct SettingsView {
   }
 
   @Builder
-  rateChip(choice: TextChoice) {
-    Text(choice.label)
+  rateChip(args: RateChipArgs) {
+    Text(args.choice.label)
       .fontSize(14)
-      .fontColor(this.sampleRate === choice.value
-        ? $r('app.color.on_primary') : $r('app.color.on_surface_variant'))
+      .fontColor(args.disabled
+        ? $r('app.color.outline')
+        : (this.sampleRate === args.choice.value ? $r('app.color.on_primary') : $r('app.color.on_surface_variant')))
+      .opacity(args.disabled ? 0.5 : 1)
       .padding({ left: 14, right: 14, top: 8, bottom: 8 })
       .borderRadius(18)
-      .backgroundColor(this.sampleRate === choice.value
+      .backgroundColor(this.sampleRate === args.choice.value
         ? $r('app.color.primary') : $r('app.color.surface_container_high'))
-      .onClick(() => this.setRate(choice.value))
+      .onClick(() => {
+        if (!args.disabled) {
+          this.setRate(args.choice.value);
+        }
+      })
   }
 
   @Builder
-  bitDepthChip(choice: TextChoice) {
-    Text(choice.label)
+  bitDepthChip(args: BitDepthChipArgs) {
+    Text(args.choice.label)
       .fontSize(14)
-      .fontColor(this.audioFormat === choice.value
-        ? $r('app.color.on_primary') : $r('app.color.on_surface_variant'))
+      .fontColor(args.disabled
+        ? $r('app.color.outline')
+        : (this.audioFormat === args.choice.value ? $r('app.color.on_primary') : $r('app.color.on_surface_variant')))
+      .opacity(args.disabled ? 0.5 : 1)
       .padding({ left: 14, right: 14, top: 8, bottom: 8 })
       .borderRadius(18)
-      .backgroundColor(this.audioFormat === choice.value
+      .backgroundColor(this.audioFormat === args.choice.value
         ? $r('app.color.primary') : $r('app.color.surface_container_high'))
-      .onClick(() => this.setBitDepth(choice.value))
+      .onClick(() => {
+        if (!args.disabled) {
+          this.setBitDepth(args.choice.value);
+        }
+      })
   }
 
   @Builder
@@ -462,7 +506,7 @@ export struct SettingsView {
                 this.fieldLabel($r('app.string.sample_rate_mode'), $r('app.string.audio_applies_hint'))
                 Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(10), cross: LengthMetrics.vp(10) } }) {
                   ForEach(RATE_CHOICES, (choice: TextChoice) => {
-                    this.rateChip(choice)
+                    this.rateChip({ choice: choice, disabled: this.opusLockedRate(choice.value) })
                   }, (choice: TextChoice) => `${choice.value}`)
                 }
                 .width('100%')
@@ -482,7 +526,7 @@ export struct SettingsView {
                 this.fieldLabel($r('app.string.bitdepth_mode'), $r('app.string.bitdepth_hint'))
                 Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(10), cross: LengthMetrics.vp(10) } }) {
                   ForEach(BITDEPTH_CHOICES, (choice: TextChoice) => {
-                    this.bitDepthChip(choice)
+                    this.bitDepthChip({ choice: choice, disabled: this.opusLockedFormat(choice.value) })
                   }, (choice: TextChoice) => `${choice.value}`)
                 }
                 .width('100%')
