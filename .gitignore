@@ -20,3 +20,6 @@
 
 # per-module ohpm install dirs (native dep libmcyopus pulls one in)
 **/oh_modules
+
+# regression harness artifacts (captures, hilog dumps, layout snapshots)
+/test/results/
