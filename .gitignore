@@ -15,3 +15,6 @@
 /entry/patch.json
 /research
 /.worktrees
+
+# per-module ohpm install dirs (native dep libmcyopus pulls one in)
+**/oh_modules
