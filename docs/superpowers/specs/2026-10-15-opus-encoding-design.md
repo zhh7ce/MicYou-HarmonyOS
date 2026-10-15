@@ -75,7 +75,7 @@ CapturePump on('readData') → 1320 B 分片 → controller.onPcm(payload)
 ```
 
 - 电平 RMS 仍从 pump 的 PCM 计算，节流 100 ms 不变；watchdog、mute、snapshot 不变。
-- DTX 静默小包（约 2 B）正常发送、正常消耗序号：桌面按 TOC 解析时长、解码成舒适噪声，序号连续故不触发丢包判定。
+- DTX 静默小包（实测 libopus 1.5.2 为 1 B 的 TOC 包，不会出现 0 字节包）正常发送、正常消耗序号：桌面按 TOC 解析时长、解码成舒适噪声，序号连续故不触发丢包判定。
 - `pump.stop()` 尾冲的残余 PCM 凑不满一帧时丢弃并打日志（Android 同样不冲不完整组）；`FecGroup` 未满 12 包的残余组丢弃不发（桌面恢复要求恰好 11/12 源包，残组奇偶包无意义）。
 - 编码器实例每会话新建/销毁（与 socket 一次性原则同构）；teardown 顺序：watchdog → pump.stop → destroyEncoder+frameBuffer.reset → audioOut.stop → background.stop → control.close。
 

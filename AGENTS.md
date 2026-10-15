@@ -3,9 +3,13 @@
 ## Overview
 
 HarmonyOS NEXT client for MicYou: captures microphone audio on the phone and streams
-it to the desktop server over the same wire protocol the Android client uses. Single
-`entry` HAP module, ArkTS only, no native code, no third-party dependencies
-(`oh-package.json5` is empty — the proto3 codec under `net/` is hand-rolled).
+it to the desktop server (as PCM or, on-device, as Opus) over the same wire protocol
+the Android client uses. One `entry` HAP module: ArkTS plus a single napi native
+module (`libmcyopus.so`, wrapping libopus). No third-party ArkTS/runtime dependency —
+`entry/oh-package.json5` carries only the local types package
+`"libmcyopus.so": "file:./src/main/cpp/types/libmcyopus"`, and the proto3 codec under
+`net/` is hand-rolled. The one native C dependency is libopus (BSD-3), tracked as a
+git submodule at `lib/opus` pinned to v1.5.2.
 
 bundleName `com.zhh7ce.micyou.hmos`, vendor `zhh7ce`, main element `EntryAbility`.
 Two pages: `pages/Index.ets` (the `Navigation` host and home screen) and
@@ -64,26 +68,37 @@ target; the manual `TextInput` pair overrides the selection.
 7. `await background.start(context)` — `audioRecording` continuous task with a
    wantAgent back to this ability
 8. Read `ConnectionStore.shared.settings` into a `CaptureConfig { sampleRate,
-   channels, audioFormat, sourceType }`; `applied = await pump.start(pcmSink,
-   levelSink, config)`; stash `applied.sampleRate/channels/audioFormat` into
-   `capSampleRate/capChannels/capFormat`, `capCodec = 0` (Opus not wired yet; the
-   stored `settings.codec` is deliberately ignored on the send path)
+   channels, audioFormat, sourceType }` plus `wantOpus = settings.codec ===
+   CODEC_OPUS`; a stored Opus session whose rate is not libopus-native or whose
+   format is not 16-bit is clamped to 48 kHz / 16-bit before the pump starts
+   (warn log `MicYouEngine`); `applied = await pump.start(pcmSink, levelSink,
+   config)`; stash `applied.sampleRate/channels/audioFormat` into
+   `capSampleRate/capChannels/capFormat`; in Opus mode also
+   `encoder.create(applied…)`, `frameBuffer.start(applied…)`,
+   `fecGroup.reset()` and `capCodec = CODEC_OPUS`, otherwise `capCodec = CODEC_PCM`
 9. Phase → `Streaming`, start the 1 s watchdog
 10. Fire-and-forget `ConnectionStore.shared.recordSuccess(name, host, tcpPort)` —
     only a real success reaches history, a mistyped manual address never pollutes it
 
-Any throw runs `await teardown()` (watchdog → pump.stop → audioOut.stop →
-background.stop → control.close) and sets phase `Failed` with the reason.
+Any throw runs `await teardown()` (watchdog → pump.stop → frameBuffer.reset →
+fecGroup.reset → encoder.destroy → audioOut.stop → background.stop → control.close)
+and sets phase `Failed` with the reason.
 
 Data path: `CapturePump`'s `on('readData')` callback concatenates its carry-over
 buffer with the new chunk, slices at `UDP_PCM_PAYLOAD_SIZE = 1320` bytes, hands each
-slice to `MicYouController.onPcm`. The controller encodes `OrderedAudioPacket` via
-`encodeAudioPacket(payload, seq, Date.now(), sessionId, capSampleRate, capChannels,
-capFormat, capCodec)` — always the **applied** config, so the wire header can never
-disagree with the actual capture — and pushes it through `audioOut.send`. The same
-callback also computes a linear RMS on the correct PCM view (int16 / int24 packed /
-float32) and calls `onLevel`; the controller throttles snapshot republishing to
-`LEVEL_PUBLISH_INTERVAL_MS = 100`.
+slice to `MicYouController.onPcm`, and computes a linear RMS on the correct PCM view
+(int16 / int24 packed / float32) for `onLevel`; the controller throttles snapshot
+republishing to `LEVEL_PUBLISH_INTERVAL_MS = 100`. PCM mode encodes each slice
+straight into an `OrderedAudioPacket` via `encodeAudioPacket(payload, seq, Date.now(),
+sessionId, capSampleRate, capChannels, capFormat, CODEC_PCM)` and sends it. Opus mode
+feeds the slices to `OpusFrameBuffer`, which accumulates them into whole 20 ms S16LE
+frames (1320 does not divide 1920, so a remainder is carried across calls); each frame
+goes through `OpusBridge.encode` (native `opus_encode`) and is sent as an
+`OrderedAudioPacket` with `codec = CODEC_OPUS`. Every encoded packet is also handed to
+`FecGroup`; on the twelfth packet the group closes and the byte-wise XOR parity goes
+out as a separate frame via `encodeFecParityPacket`. In both modes the controller
+encodes from `capSampleRate/capChannels/capFormat` — always the **applied** config —
+so the wire header can never disagree with the actual capture.
 
 Watchdog ticks every 1 s: fails the session when `control.isHeartbeatStale()` (no
 ping for `HEARTBEAT_TIMEOUT_MS = 5000`) or `audioOut.sendFailedHard()` (500
@@ -97,7 +112,8 @@ climbing even against desktop builds that never send `StatsMessage`.
 flowchart LR
   MIC[Microphone] --> CP[audio/CapturePump<br/>AudioCapturer rate/ch/format/source configurable<br/>re-chunk to 1320 B, fallback to MIC/16-bit]
   CP --> CT[app/MicYouController<br/>sequence + session id + applied config]
-  CT --> NM[net/Messages + net/Pb<br/>OrderedAudioPacket]
+  CT -- "PCM" --> NM[net/Messages + net/Pb<br/>OrderedAudioPacket + FEC parity]
+  CT -- "Opus" --> OB[audio/OpusFrameBuffer → OpusBridge<br/>20 ms frames via libopus napi<br/>audio/FecGroup parity every 12] --> NM
   NM --> AS[net/AudioSender<br/>UDP frame, magic MicU]
   AS --> SRV[desktop, TCP port + 1]
   SRV -- "Ping ~500 ms" --> CC[net/ControlClient<br/>FrameAssembler]
@@ -137,20 +153,39 @@ audio constants in `net/Wire.ets`.
   so a datagram stays under the 1472-byte IP-fragmentation limit; frame size is
   `bytesPerSampleFor(audioFormat) * channels`, so packet duration varies with the
   applied config — 13.75 ms at 16-bit / mono / 48 kHz, roughly half that for stereo
-  or float32
-- `codec` on the wire is PCM (`0`) only right now. `CODEC_OPUS = 1` is declared in
-  `Wire.ets` and `Messages.encodeAudioPacket` already takes `codec` as a parameter,
-  but the controller hard-codes `capCodec = 0` and `SettingsView` keeps the Opus chip
-  disabled with `.opacity(0.5)`. The planned route for on-device Opus is NDK +
-  napi libopus (VOIP application, 20 ms frames, in-band FEC, DTX); decided, not
-  implemented
+  or float32. The Opus branch slices PCM at the same 1320 bytes but re-accumulates
+  the slices into whole 20 ms frames (320 samples per channel at 16 kHz, 960 at
+  48 kHz), so each datagram carries encoded packets whose size is far below 1320
+- `codec` on the wire is PCM (`0`) or Opus (`CODEC_OPUS = 1`); the controller sets
+  `capCodec` from the stored `settings.codec` per session. Opus is encoded on-device
+  by the napi module `libmcyopus.so` in VOIP application mode, 20 ms frames, VBR on,
+  DTX on, `OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE)`; in-band FEC is deliberately off
+  because the desktop's decode path never requests it (`decode_fec` is always false),
+  so it would only add wasted bits. Accepted rates are libopus's native
+  {8000, 12000, 16000, 24000, 48000} Hz at 1 or 2 channels; `SettingsView` gates the
+  choices and the controller clamps a stored incompatible combo to 48 kHz / 16-bit
+  before the pump starts. Against libopus 1.5.2, DTX silence encodes to 1-byte
+  TOC-only packets, never 0 bytes, so sequence numbers keep advancing while nobody
+  speaks. Measured uplink on the test phone at 48 kHz mono: about 10.6 KB/s Opus
+  versus about 97 KB/s PCM
 - `audioFormat` uses the Android `AudioFormat` constants the desktop decoder keys
   on: `AUDIO_FORMAT_16BIT = 2`, `AUDIO_FORMAT_FLOAT32 = 4`, `AUDIO_FORMAT_24BIT = 6`.
   These are the three branches verified on the desktop's `validate_audio_packet` /
   PCM decode path; other encodings (including 32-bit integer PCM) have no branch
   there, so the UI does not offer them
 - FEC fields (`fecBuffer`, `fecSequenceNumber`, `fecPacketLengths`) stay unset on
-  the PCM path, which `validate_audio_packet` accepts when the lengths are empty
+  the PCM path, which `validate_audio_packet` accepts when the lengths are empty.
+  The Opus path sends one out-of-band XOR parity packet per 12 audio packets
+  (`FEC_GROUP_SIZE`): the parity frame carries `fecBuffer = [0x01]` (the non-empty
+  marker the desktop uses to detect parity under the ExplicitMarker layout),
+  `fecSequenceNumber` = the group's first sequence number (group 0 omits it —
+  proto3 decodes an absent varint as 0), `fecPacketLengths` = the 12 source lengths
+  as packed uint32s, and the byte-wise XOR (zero-padded to the longest source) in
+  `audioPacket.buffer` with `codec = 1`. The parity packet takes the next sequence
+  number without consuming it — the following audio packet reuses that number, so
+  the audio-side sequence stays gap-free (`MicYouController.onOpusFrame`, comment
+  citing Android `AudioEngine.kt:970-972`); partial groups are dropped at reset
+  because desktop recovery needs exactly 11-of-12 sources
 - `optional bool is_muted` must be present on the wire even when false, or the
   desktop reads `None` — hence `PbWriter.writeOptionalBool` instead of skipping zero
   values
@@ -170,7 +205,8 @@ audio constants in `net/Wire.ets`.
 
 ## Modules
 
-`entry/src/main/ets/`, a single HAP module, no native code:
+`entry/src/main/ets/`, plus one napi native module under `entry/src/main/cpp/`, all
+inside the single `entry` HAP module:
 
 | File | Role |
 |---|---|
@@ -181,14 +217,18 @@ audio constants in `net/Wire.ets`.
 | `app/PermissionGate.ets` | `ohos.permission.MICROPHONE` through `requestPermissionsFromUser` |
 | `app/BackgroundRunner.ets` | `audioRecording` continuous task with a wantAgent back to this ability |
 | `audio/CapturePump.ets` | `AudioCapturer` in callback mode (`on('readData')`), re-chunks into 1320-byte payloads with a carry buffer, tail-flushes on stop; per-format RMS level metering; falls back to `SOURCE_MIC` / 16-bit on `createAudioCapturer` failure |
-| `net/Wire.ets` | frame header, handshake bytes, `FrameAssembler`, protocol constants (`PACKET_MAGIC`, `UDP_PACKET_MAGIC`, `UDP_PCM_PAYLOAD_SIZE`, `CODEC_*`, `AUDIO_FORMAT_*`, `SOURCE_*`), `udpPortFor`, `bytesPerSampleFor` |
-| `net/Pb.ets` | minimal proto3 `PbWriter`/`PbReader`: varint, length-delimited, fixed32. 64-bit values are encoded by repeated division so they stay exact inside the double range without BigInt |
-| `net/Messages.ets` | message encoders and the inbound decoder, keyed by the proto field numbers. `encodeAudioPacket` takes `audioFormat` and `codec` as parameters |
+| `audio/OpusFrameBuffer.ets` | accumulates the pump's 1320-byte PCM slices into whole 20 ms S16LE frames with a carry buffer (1320 does not divide 1920); `reset()` drops the sub-frame remainder at session stop — no padding, no partial encode, same as Android |
+| `audio/OpusBridge.ets` | thin ArkTS wrapper over `libmcyopus.so` (`createEncoder`/`encode`/`destroyEncoder`); one encoder handle per session, created after the pump reports the applied config; all calls stay on the main JS thread because the native module keeps global slots without locking |
+| `audio/FecGroup.ets` | collects 12 encoded opus packets and hands back the byte-wise XOR parity (zero-padded to the longest source), the 12 original lengths and the group's start sequence; partial groups are discarded on reset |
+| `net/Wire.ets` | frame header, handshake bytes, `FrameAssembler`, protocol constants (`PACKET_MAGIC`, `UDP_PACKET_MAGIC`, `UDP_PCM_PAYLOAD_SIZE`, `CODEC_*`, `AUDIO_FORMAT_*`, `SOURCE_*`, `OPUS_FRAME_MS`, `FEC_GROUP_SIZE`), `udpPortFor`, `bytesPerSampleFor`, `opusFrameSamples`/`opusFrameBytes`, `isOpusNativeRate` |
+| `net/Pb.ets` | minimal proto3 `PbWriter`/`PbReader`: varint, length-delimited, fixed32, packed repeated uint32 (`writePackedUInt32s`). 64-bit values are encoded by repeated division so they stay exact inside the double range without BigInt |
+| `net/Messages.ets` | message encoders and the inbound decoder, keyed by the proto field numbers. `encodeAudioPacket` takes `audioFormat` and `codec` as parameters and never writes FEC fields; `encodeFecParityPacket` builds the out-of-band XOR parity frame |
 | `net/ControlClient.ets` | TCP control connection: connect, handshake, frame dispatch, pong reply, heartbeat supervision (`isHeartbeatStale`, `silenceMs`) |
 | `net/AudioSender.ets` | UDP sink, oversized-datagram guard, consecutive-failure counter (`sendFailedHard`) |
 | `net/Discovery.ets` | mDNS browse plus resolve for `_micyou._tcp`, reported as `DiscoveredServer` |
 | `pages/Index.ets` | Navigation host + home screen, laid out to match Android `MobileHome`: header card (logo + title/subtitle + settings gear pushing `settings` route), connection card (rescan button, discovered list with selection, manual host/port `TextInput` pair), control card (status text + optional LIVE badge + peer + `Progress` ring around a centered FAB + failure line), bottom bar (mute pill + status dot). `navDestination(this.routeMap)` returns `SettingsView` for name `settings`. No link statistics render on this screen — Android parity |
-| `pages/SettingsView.ets` | `NavDestination` (hidden title bar) with a back chevron pushing `onBack()`. Sections: Appearance (theme chips, language chips), Audio (source chips filtered by `deviceInfo.sdkApiVersion`, sample-rate chips, channel chips, bit-depth chips, codec chips with Opus disabled), Connection record (auto-connect `Toggle`, last-server card, history rows with per-row delete + `×N` count, clear-all), About. Reads and writes through `ConnectionStore.shared`; changes to theme call `AppEnvironment.applyTheme()`, language calls `AppEnvironment.applyLanguage()` and show a restart hint |
+| `pages/SettingsView.ets` | `NavDestination` (hidden title bar) with a back chevron pushing `onBack()`. Sections: Appearance (theme chips, language chips), Audio (source chips filtered by `deviceInfo.sdkApiVersion`, sample-rate chips, channel chips, bit-depth chips, codec chips PCM/Opus — with Opus selected, non-libopus-native rates and non-16-bit depths are greyed at `opacity(0.5)` and not clickable, and a stored incompatible rate/format is rewritten to 48 kHz / 16-bit and persisted both on page load and on the codec toggle), Connection record (auto-connect `Toggle`, last-server card, history rows with per-row delete + `×N` count, clear-all), About. Reads and writes through `ConnectionStore.shared`; changes to theme call `AppEnvironment.applyTheme()`, language calls `AppEnvironment.applyLanguage()` and show a restart hint |
+| `entry/src/main/cpp/` | the napi module `libmcyopus.so`: `napi_init.cpp` exposes `createEncoder`/`encode`/`destroyEncoder` around libopus, taking exactly one 20 ms S16LE frame per call; `CMakeLists.txt` `add_subdirectory`s the libopus git submodule at `lib/opus` (v1.5.2, BSD-3, licence text in `lib/opus/COPYING`) and forces the libopus build options in-file; the ArkTS side binds through `cpp/types/libmcyopus/index.d.ts` |
 
 ## UI rules
 
@@ -260,6 +300,16 @@ hvigorw clean --no-daemon
 hvigorw tasks --no-daemon            # task list; assembleHap is module-scoped, not listed
 ```
 
+One prerequisite before the first build: libopus is a git submodule, so
+`git submodule update --init` has to fetch it (`.gitmodules` → `lib/opus`,
+`https://github.com/xiph/opus.git`, pinned to tag v1.5.2). The native build is driven
+by the tracked `entry/build-profile.json5` `externalNativeOptions`
+(`./src/main/cpp/CMakeLists.txt`, `abiFilters: ["arm64-v8a"]`) with an intentionally
+empty `arguments` string — the libopus build options are `set(... CACHE BOOL "" FORCE)`
+inside `CMakeLists.txt`, so no machine-local profile can silently change what gets
+compiled. Measured in the signed HAP (arm64-v8a): `libmcyopus.so` 594,568 B,
+`libc++_shared.so` 1,262,504 B, total `entry-default-signed.hap` 2,326,054 B.
+
 Output in `entry/build/default/outputs/default/`:
 
 - `entry-default-signed.hap` — installable
@@ -294,7 +344,9 @@ phone.
 
 Out of tree, the proto3 codec was round-tripped against `network.proto` with
 protobufjs as an independent parser: field numbers, wire types and the emitted bytes
-matched protobufjs' own encoder, the float32 stats fields decoded correctly, and
+matched protobufjs' own encoder, the float32 stats fields decoded correctly, the FEC
+parity packet round-tripped (`[0x01]` marker, group-start `fecSequenceNumber`, 12
+packed lengths), and regular audio packets were asserted never to leak FEC fields;
 `FrameAssembler` survived both byte-at-a-time and coalesced delivery. Re-run that
 check (in a scratch directory, protobufjs is not a project dependency) whenever
 `net/Pb.ets` or the field numbers in `net/Messages.ets` change.
@@ -439,12 +491,6 @@ test client will knock the phone off the mic.
 ## Known gaps
 
 - Wi-Fi mode only: no USB (`hdc` port forwarding) and no web mode
-- raw PCM only: no on-device Opus encoder, so no FEC parity packets and no bandwidth
-  reduction — packet loss surfaces as clicks at the desktop. `CODEC_OPUS` exists as a
-  constant, `ConnectionStore.settings.codec` persists a codec value, and
-  `SettingsView` shows the Opus chip disabled; the planned on-device encoder is
-  NDK + napi libopus (VOIP application, 20 ms frames, in-band FEC, DTX), decided
-  but not implemented, so the send path forces `capCodec = 0` regardless
 - mute is pushed to the desktop and an inbound `MuteMessage` is parsed but not acted
   on; `PluginMessage` from the desktop is ignored entirely
 - the `audioRecording` continuous task has not been tested with the screen off

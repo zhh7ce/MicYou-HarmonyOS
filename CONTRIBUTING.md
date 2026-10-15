@@ -1,11 +1,13 @@
 # Contributing
 
 Thanks for taking a look. This is a single-module HarmonyOS NEXT app written in strict
-ArkTS with no third-party dependencies, so the bar to get building is low.
+ArkTS plus one napi native module (`libmcyopus.so`, wrapping libopus), with no
+third-party ArkTS/runtime dependencies, so the bar to get building is low.
 
 ## What this project is
 
-A MicYou client for HarmonyOS phones: it captures the microphone and streams raw PCM to
+A MicYou client for HarmonyOS phones: it captures the microphone and streams PCM —
+or, on-device, Opus-encoded audio with out-of-band XOR FEC parity packets — to
 a MicYou desktop server over the shared wire protocol. Upstream project (desktop server
 plus Android and iOS clients): <https://github.com/MicYou-Dev/MicYou>.
 
@@ -18,22 +20,31 @@ depend on a protobuf runtime.
 
 1. Install DevEco Studio (or the HarmonyOS Command Line Tools) plus the SDK. Everything
    below is driven from the CLI, so the IDE is only needed once, for signing.
-2. Export the SDK location; every `hvigorw` invocation fails without it:
+2. Fetch the native dependency: libopus is a git submodule at `lib/opus` (pinned to
+   v1.5.2, BSD-3), so before the first build run
+
+   ```bash
+   git submodule update --init
+   ```
+
+3. Export the SDK location; every `hvigorw` invocation fails without it:
 
    ```bash
    export DEVECO_SDK_HOME=/path/to/sdk
    ```
 
-3. Copy the tracked profile template and let DevEco fill in the signing block
+4. Copy the tracked profile template and let DevEco fill in the signing block
    (File > Project Structure > Project > Signing Configs > "Automatically generate
    signature"). `build-profile.json5` is gitignored on purpose — the encrypted key
-   material it holds only decrypts on the machine that generated it.
+   material it holds only decrypts on the machine that generated it. The module-level
+   `entry/build-profile.json5` is tracked and already carries the `externalNativeOptions`
+   block that builds `entry/src/main/cpp/`.
 
    ```bash
    cp build-profile.example.json5 build-profile.json5
    ```
 
-4. Build:
+5. Build:
 
    ```bash
    hvigorw assembleHap --no-daemon
@@ -53,6 +64,9 @@ are in [AGENTS.md](AGENTS.md), section "Debug loop".
 If you touch `net/Pb.ets` or any field number in `net/Messages.ets`, re-run the codec
 against an independent protobuf parser (protobufjs in a scratch directory — it is not a
 project dependency) and confirm the emitted bytes and the decoded values still round-trip.
+The harness also round-trips the FEC parity packet (`[0x01]` marker, group-start
+`fecSequenceNumber`, packed lengths) and asserts regular audio packets never carry FEC
+fields; keep both checks green.
 
 ## Code style
 
@@ -112,4 +126,6 @@ numbers and semantics can be agreed before code is written.
 This project is licensed under the GNU General Public License version 3.0 or (at your
 option) any later version. By submitting a pull request you confirm that you hold the
 rights to the contribution and that it is offered under the same license, with no
-additional permissions or restrictions.
+additional permissions or restrictions. The native module links against libopus, which
+is BSD-3 licensed and shipped as the `lib/opus` git submodule; its licence text is in
+`lib/opus/COPYING`.

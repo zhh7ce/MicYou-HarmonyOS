@@ -8,13 +8,16 @@
 
 ```
 entry/src/main/ets/
-  net/          Pb.ets              最小 proto3 编解码（varint、length-delimited、fixed32）
-                Wire.ets            帧头、握手字节、FrameAssembler、协议常量、SOURCE_* 常量
-                Messages.ets        MessageWrapper 编解码
+  net/          Pb.ets              最小 proto3 编解码（varint、length-delimited、fixed32、packed uint32）
+                Wire.ets            帧头、握手字节、FrameAssembler、协议常量（含 OPUS_FRAME_MS / FEC_GROUP_SIZE）、SOURCE_* 常量
+                Messages.ets        MessageWrapper 编解码（含 FEC 奇偶包）
                 ControlClient.ets   TCP 控制连接：握手、帧分发、pong、心跳监督
                 AudioSender.ets     UDP 音频发送
                 Discovery.ets       mDNS _micyou._tcp 浏览与解析
   audio/        CapturePump.ets     AudioCapturer 回调采集、按配置切片、失败回退
+                OpusFrameBuffer.ets 把 1320 B 切片攒成 20 ms 整帧（carry 缓冲）
+                OpusBridge.ets      libmcyopus.so napi 模块的 ArkTS 桥（createEncoder / encode / destroyEncoder）
+                FecGroup.ets        每 12 包攒一个 XOR 奇偶包
   app/          MicYouController.ets 会话状态机
                 ConnectionStore.ets @ohos.data.preferences 持久层（历史 / 上次连接 / 设置）
                 BackgroundRunner.ets audioRecording 长任务
@@ -22,9 +25,13 @@ entry/src/main/ets/
                 AppEnvironment.ets   UIAbility 上下文持有 + 主题 / 语言应用
   pages/        Index.ets           主页面（Navigation 容器）
                 SettingsView.ets     设置页（NavDestination）
+entry/src/main/cpp/
+                napi_init.cpp        napi 模块 libmcyopus.so：libopus 编码器句柄槽位 + 20 ms 帧编码
+                CMakeLists.txt       add_subdirectory 引入 git 子模块 lib/opus（v1.5.2，BSD-3），编译选项在文件内 FORCE 固定
+                types/libmcyopus/    index.d.ts 类型声明，供 ArkTS 侧 import
 ```
 
-单 `entry` HAP 模块，纯 ArkTS，没有 native 代码，`oh-package.json5` 为空——proto3 编解码是自己在 `net/Pb.ets` 里实现的，不引入 protobuf 运行时。bundleName 为 `com.zhh7ce.micyou.hmos`，`vendor` 为 `zhh7ce`。
+单 `entry` HAP 模块：ArkTS 加一个 napi native 模块（`libmcyopus.so`，封装 libopus）。没有第三方 ArkTS 运行时依赖——`entry/oh-package.json5` 只登记本地类型包 `libmcyopus.so`；proto3 编解码仍是自己在 `net/Pb.ets` 里实现的，不引入 protobuf 运行时。唯一的 native C 依赖是 libopus（BSD-3），以 git 子模块形式跟踪在 `lib/opus`，锁定 v1.5.2。bundleName 为 `com.zhh7ce.micyou.hmos`，`vendor` 为 `zhh7ce`。
 
 图标不是手画的：`scripts/gen_logo.py`（唯一依赖 Pillow，只作为开发工具，不进应用）用一个几何常量描述扁平麦克风标记，重跑一次写出六张 PNG——头部图 `app_logo.png`、启动窗口图 `startIcon.png`，以及 `AppScope` 与 `entry` 两处分层启动图标的 `foreground.png` / `background.png`。
 
@@ -45,17 +52,19 @@ entry/src/main/ets/
 3. `control.open` — TCP 连接 + `MicYouCheck1` / `MicYouCheck2` 握手 + `ConnectMessage{sessionId, platform: "harmonyos"}`
 4. `audioOut.start` — UDP 绑定，目标端口 = 控制端口 + 1
 5. `background.start` — `audioRecording` 长任务，带一个回指本 ability 的 wantAgent
-6. 从 `ConnectionStore.shared.settings` 读一份 `CaptureConfig { sampleRate, channels, audioFormat, sourceType }` 交给 `pump.start`；返回的 `CaptureApplied` 存到 controller 的 `capSampleRate/capChannels/capFormat`，`capCodec` 硬编 `0`（PCM，Opus 见"已知空白"）
+6. 从 `ConnectionStore.shared.settings` 读一份 `CaptureConfig { sampleRate, channels, audioFormat, sourceType }` 交给 `pump.start`；若 `settings.codec` 是 Opus 而存下的采样率不是 libopus 原生档位或位深不是 16-bit，先钳制到 48 kHz / 16-bit 再开采集。返回的 `CaptureApplied` 存到 controller 的 `capSampleRate/capChannels/capFormat`；PCM 分支 `capCodec = 0`，Opus 分支额外 `encoder.create` + `frameBuffer.start` 并置 `capCodec = 1`
 7. 相位 `Streaming`，启动 1 s 看门狗
 8. `ConnectionStore.recordSuccess(name, host, tcpPort)` 只在这一步之后 fire-and-forget，写错的地址不会污染历史
 
-任一步抛错都反向 teardown：停看门狗 → flush 并释放 capturer → 关 UDP → 停长任务 → 关 TCP，相位 `Failed`。
+任一步抛错都反向 teardown：停看门狗 → flush 并释放 capturer → frameBuffer.reset → fecGroup.reset → destroyEncoder → 关 UDP → 停长任务 → 关 TCP，相位 `Failed`。
 
-数据面：`CapturePump` 的 `on('readData')` 回调把缓冲区按 1320 字节切片，`MicYouController.onPcm` 用**实际生效**的采样率/声道/`audioFormat` + `codec=0` 编成 `OrderedAudioPacket`（sequence、unix ms timestamp、sessionId）发到 UDP；同一次回调里按格式算 RMS 推给 `onLevel`，controller 每 100 ms 才 republish 一次快照，避免 ArkUI 过度重绘。看门狗负责：5 s 内没收到桌面端 ping，或 UDP 连续失败 500 次，判链路断；否则每秒至少 publish 一次让发送计数在老桌面端上也保持爬升。
+数据面：`CapturePump` 的 `on('readData')` 回调把缓冲区按 1320 字节切片，交给 `MicYouController.onPcm`。PCM 分支直接把切片用**实际生效**的采样率/声道/`audioFormat` + `codec=0` 编成 `OrderedAudioPacket`（sequence、unix ms timestamp、sessionId）发到 UDP。Opus 分支把切片喂给 `OpusFrameBuffer` 攒成 20 ms S16LE 整帧，逐帧过 `OpusBridge.encode`（native `opus_encode`），以 `codec=1` 发包；每个编码包同时进 `FecGroup`，满 12 包就把逐字节 XOR 奇偶另发一帧（`encodeFecParityPacket`）。电平 RMS 两种分支都从 PCM 按格式算并推给 `onLevel`，controller 每 100 ms 才 republish 一次快照，避免 ArkUI 过度重绘。看门狗负责：5 s 内没收到桌面端 ping，或 UDP 连续失败 500 次，判链路断；否则每秒至少 publish 一次让发送计数在老桌面端上也保持爬升。
 
 ## 构建与安装
 
 需要 DevEco Studio 或 Command Line Tools + HarmonyOS SDK。本机 SDK 为 26.0.0（API 26），项目 `compatibleSdkVersion` 保持 5.0.0(12)，成员 `@since` 高于 12 的 API 通过 `deviceInfo.sdkApiVersion` 在运行时门控，而不是把基线拉高。
+
+首次构建前有一条前置：libopus 是 git 子模块，先 `git submodule update --init`（`.gitmodules` → `lib/opus`，https://github.com/xiph/opus.git ，锁 v1.5.2）。native 构建由被跟踪的 `entry/build-profile.json5` 里 `externalNativeOptions` 驱动（`./src/main/cpp/CMakeLists.txt`，`abiFilters: ["arm64-v8a"]`），`arguments` 刻意留空——libopus 的编译选项写在 `CMakeLists.txt` 里并 `FORCE`，本机配置改不动实际编译内容。arm64-v8a 实测体积：`libmcyopus.so` 594,568 B，`libc++_shared.so` 1,262,504 B，签名 HAP 共 2,326,054 B。
 
 `build-profile.json5` 是本机签名材料，仓库不跟踪。从示例起步：
 
@@ -86,10 +95,10 @@ hvigorw assembleHap --no-daemon
 
 音频包（`AudioPacketMessageOrdered`）：
 
-- 载荷固定切成 1320 字节（`UDP_PCM_PAYLOAD_SIZE`），确保一个 UDP 数据报在 1472 字节以内不触发 IP 分片；一帧字节数 = `bytesPerSampleFor(audioFormat) × channels`，16-bit 单声道 = 660 帧 = 13.75 ms（48 kHz），换格式或立体声每包时长会变
-- `codec` 目前只有 PCM (`0`)。`CODEC_OPUS = 1` 常量存在但发送路径写死 `capCodec = 0`；端上 Opus 的路线已定为 NDK + napi 引 libopus（VOIP 应用、20 ms 帧、in-band FEC、DTX），尚未实现
+- 载荷固定切成 1320 字节（`UDP_PCM_PAYLOAD_SIZE`），确保一个 UDP 数据报在 1472 字节以内不触发 IP 分片；一帧字节数 = `bytesPerSampleFor(audioFormat) × channels`，16-bit 单声道 = 660 帧 = 13.75 ms（48 kHz），换格式或立体声每包时长会变。Opus 分支同样按 1320 字节切 PCM，但会再攒成 20 ms 整帧（16 kHz → 320 样点/声道，48 kHz → 960）后编码，线上包体远小于 1320
+- `codec` 取 PCM (`0`) 或 Opus (`CODEC_OPUS = 1`)，controller 每会话按存下的 `settings.codec` 设置。Opus 在端上由 napi 模块 `libmcyopus.so` 编码：VOIP application 模式、20 ms 帧、VBR 开、DTX 开、SIGNAL=VOICE；in-band FEC 刻意关闭——桌面端解码从不请求 FEC（`decode_fec` 恒为 false），开了只是白费码率。合法采样率是 libopus 原生档位 {8000, 12000, 16000, 24000, 48000} Hz、1 或 2 声道；DTX 静默时 libopus 1.5.2 输出 1 字节的 TOC 包（不会是 0 字节），序号照常推进
 - `audioFormat` 沿用安卓的编码常量：`2` = 16-bit S16LE、`6` = 24-bit packed S24LE、`4` = float32 F32LE；只有这三种在桌面端的 `validate_audio_packet` / 解码分支里有对应处理，其它（包括 32-bit 整数 PCM）不暴露
-- FEC 字段（`fecBuffer`、`fecSequenceNumber`、`fecPacketLengths`）在 PCM 分支全省略，桌面端在 lengths 空的时候也接受
+- FEC 字段（`fecBuffer`、`fecSequenceNumber`、`fecPacketLengths`）在 PCM 分支全省略，桌面端在 lengths 空的时候也接受。Opus 分支每 12 个音频包发一个带外 XOR 奇偶包：`fecBuffer = [0x01]` 是桌面端识别奇偶包的标记，`fecSequenceNumber` = 组起始序号，`fecPacketLengths` = 12 条 packed uint32 原始长度，XOR 数据（零填充到最长源包）放 `audioPacket.buffer`、`codec=1`；奇偶包借用下一个普通包序号但不消耗它，下一个普通包复用同一序号，所以音频侧序号无空洞（对齐安卓 `AudioEngine.kt:970-972` 的写法，见 `MicYouController.onOpusFrame`）。未满 12 包的残组直接丢弃——桌面恢复要求恰好 11/12 源包
 
 采集来源（`audio.SourceType`，持久化用与之原值一致的 `SOURCE_*` 常量，见 `net/Wire.ets`）：
 
@@ -109,20 +118,20 @@ hvigorw assembleHap --no-daemon
 主页面右上齿轮进设置页（`SettingsView`，作为 `NavDestination`，路由名 `settings`）。所有条目落 `@ohos.data.preferences`，实例名 `micyou_prefs`，进程内单例 `ConnectionStore.shared`。
 
 - 外观：主题（跟随系统 / 浅色 / 深色，走 `context.setColorMode`，API 18+，低于则回落系统主题）；语言（跟随系统 / English / 简体中文 / 繁體中文，走 `i18n.System.setAppPreferredLanguage`，需冷重启才生效，UI 上有对应提示）
-- 音频：来源 / 采样率（16k / 44.1k / 48k / 96k）/ 声道（单声道 / 立体声）/ 位深（16-bit / 24-bit / 32-bit float）/ 编码（PCM 可用，Opus 禁用占位）；来源列表按 `deviceInfo.sdkApiVersion` 过滤，成员 `@since` 高于设备版本的选项不显示
+- 音频：来源 / 采样率（16k / 44.1k / 48k / 96k）/ 声道（单声道 / 立体声）/ 位深（16-bit / 24-bit / 32-bit float）/ 编码（PCM / Opus）；来源列表按 `deviceInfo.sdkApiVersion` 过滤，成员 `@since` 高于设备版本的选项不显示；选中 Opus 时，非 libopus 原生采样率与非 16-bit 位深的芯片置灰（opacity 0.5）不可点，存量不兼容的采样率/位深在页面加载和切换编码时都会改写为 48 kHz / 16-bit 并持久化
 - 连接记录：自动连接开关（默认关）、上次连接设备、历史列表（按 `host:port` 去重、`connectedAt` 倒序、上限 10、`connectCount` 计数）、单条删除、清空全部
 - 关于：应用名与功能描述
 
 ## 已验证
 
-- `hvigorw assembleHap` 干净构建并出签名 HAP
-- proto3 编解码在 protobufjs 独立解析器上往返过（本仓库外的一次性检查，protobufjs 不是项目依赖）：字段号、wire type 与生成的字节序列完全对齐 protobufjs 自己的 encoder；`StatsMessage` 的 float32 字段正确解出；`FrameAssembler` 在逐字节与整块两种投递节奏下都能正常组帧
+- `hvigorw assembleHap` 干净构建并出签名 HAP（含 native `libmcyopus.so`）
+- proto3 编解码在 protobufjs 独立解析器上往返过（本仓库外的一次性检查，protobufjs 不是项目依赖）：字段号、wire type 与生成的字节序列完全对齐 protobufjs 自己的 encoder；`StatsMessage` 的 float32 字段正确解出；FEC 奇偶包同样往返验证（`[0x01]` 标记、组起始 `fecSequenceNumber`、12 条 packed 长度），并断言普通音频包从不携带 FEC 字段；`FrameAssembler` 在逐字节与整块两种投递节奏下都能正常组帧
 - nova 14 Pro 对桌面 GUI：mDNS 发现 → 连接 → 48 kHz 回调采集 → UDP 约 73 帧/秒 → 桌面解码 0.00% 丢包、0.7–0.9 ms 抖动、8–11 ms 往返
+- 真机 48 kHz 单声道带宽实测：Opus 上行约 10.6 KB/s，PCM 约 97 KB/s；FEC 奇偶包的端到端桌面恢复验收尚未在真机上跑（代码路径已接线并通过 protobufjs 对照）
 
 ## 已知空白
 
 - 只有 Wi-Fi 模式：没有 USB（`hdc` 端口转发），没有 web 模式
-- 只有 PCM：`CODEC_OPUS = 1` 常量存在，Opus 编码路径未接入；没有 on-device FEC 冗余包，也没有带宽下降，桌面端把丢包还原成爆音
 - `mute` 只被推给桌面端；入站 `MuteMessage` 会解码但不响应；桌面端的 `PluginMessage` 完全忽略
 - `audioRecording` 长任务在灭屏情况下没有实测
 - 自动连接失败只试一次，不做退避重连；`SOURCE_TYPE_VOICE_COMMUNICATION` 被真实来电抢占的采集焦点冲突路径没有实测
@@ -137,4 +146,4 @@ hvigorw assembleHap --no-daemon
 
 ## 许可
 
-GPL-3.0-or-later，详见 `LICENSE`。贡献即视为以同一许可授权。
+GPL-3.0-or-later，详见 `LICENSE`。贡献即视为以同一许可授权。native 侧链接的 libopus 为 BSD-3 许可，随 git 子模块 `lib/opus`（v1.5.2）一起分发，许可原文见 `lib/opus/COPYING`。
