@@ -17,8 +17,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(mcyopus LANGUAGES C CXX)
 
-# Encoder options live here (not in externalNativeOptions.arguments) so a
-# machine-local build profile can never change what gets compiled.
+# Encoder options live here rather than in externalNativeOptions.arguments, so
+# the empty argument string in the module build profile cannot silently change
+# what gets compiled.
 set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
