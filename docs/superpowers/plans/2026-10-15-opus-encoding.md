@@ -10,6 +10,28 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-15-opus-encoding-design.md`（执行时先读它，本计划以它为准）
 
+## 执行进度（2026-10-15 暂停点）
+
+工作区：git worktree `.worktrees/opus-encoding`，分支 `opus-encoding`（主目录仍在 `master`，未受影响）。提交均未 push。
+
+已完成（含逐步审查，审查结论记在 `.superpowers/sdd/2026-10-15-opus-encoding/progress.md`，该目录 gitignore）：
+
+- Task 1 `ff38229`：libopus 1.5.2 源码进仓，与上游 tarball 逐字节一致（475 文件，含 `COPYING`）
+- Task 2 `d5cad6d` + `44e671c`：napi 模块 `libmcyopus.so`（VOIP/20 ms/VBR/DTX/INBAND_FEC=0/SIGNAL=VOICE），编进签名 HAP，arm64 `.so` 595,432 B，另带 `libc++_shared.so` 1,262,504 B；`.gitignore` 补 `**/oh_modules` 并跟踪 `entry/oh-package-lock.json5`
+- Task 3 `14035ac`：`PbWriter.writePackedUInt32s` + `encodeFecParityPacket`，protobufjs 对着真 `network.proto` 跑通往返（含奇偶包、数据包不泄漏 FEC 字段、第 12 组起始号）
+- Task 4 `bfdc39d` + `b952d4b`：`OpusFrameBuffer`、`FecGroup`、`Wire` 的 20 ms/FEC 常量；node harness 绿（三处 brief 测试笔误已在本文件修正：`xor[0]=0xf0`、`groupStartSeq=12`、reset 后需重新 `start()`）
+- Task 5 `dc6446a`：`OpusBridge` + 控制器 Opus 数据路径 + 设置页放开 Opus 芯片；真机首流通过（nova 14 Pro：`capture active 48000 Hz / 1 ch / fmt 2 / src 7`、`createEncoder rate=48000 ch=1`、停止时 `dropped 1080 tail bytes` 后 `destroyEncoder`），桌面 GUI 收流且音质由用户确认正常；手机端上行实测约 10.6 KB/s（PCM 约 97 KB/s）
+
+未完成：
+
+- Task 5 Step 5：PCM 回归未在本机复测（PCM 分支代码未改动）
+- Task 5 的独立任务审查（task reviewer）未派发；其余四个任务都已审过并通过
+- Task 6：FEC 奇偶包接线（`fecGroup.add` 返回值消费、奇偶包占用下一个序号但不推进、每组 12 包与 1..1320 长度上限由生产方保证）
+- Task 7：设置页按 Opus 置灰不兼容采样率/位深 + 切到 Opus 时把已存的不兼容值迁移到 48 kHz/16-bit
+- Task 8：文档更新（独立 commit），需带上 Task 2/5 的体积与带宽数字
+- Task 9：全量回归清单（含 `net/Pb.ets` 变更后重跑 protobufjs harness）
+- 收尾：分支合并/推送由用户决定
+
 ## Global Constraints
 
 每个任务都隐含遵守本节：
@@ -37,7 +59,7 @@
 - Consumes: 无
 - Produces: `entry/src/main/cpp/opus/include/opus/opus.h`（Task 2 include 路径）、`entry/src/main/cpp/opus/CMakeLists.txt`（`add_subdirectory` 目标名 `opus`）
 
-- [ ] **Step 1: 下载并校验**
+- [x] **Step 1: 下载并校验**
 
 ```bash
 cd /tmp
@@ -47,7 +69,7 @@ echo '65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1  opus-1.5
 
 预期输出 `opus-1.5.2.tar.gz: OK`。失败即停，报告哈希差异，不要继续。
 
-- [ ] **Step 2: 解包进仓**
+- [x] **Step 2: 解包进仓**
 
 ```bash
 tar xf opus-1.5.2.tar.gz
@@ -59,7 +81,7 @@ ls /home/zhh7ce/Documents/codes/MicYou-HarmonyOS/entry/src/main/cpp/opus/include
 
 不裁剪、不改动任何上游文件（许可证义务靠保留原文件，见 spec §5）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/zhh7ce/Documents/codes/MicYou-HarmonyOS
@@ -89,7 +111,7 @@ git commit -m "feat: vendor libopus 1.5.2 sources for the on-device encoder"
   export function destroyEncoder(handle: number): void;
   ```
 
-- [ ] **Step 1: 写 `cpp/CMakeLists.txt`**
+- [x] **Step 1: 写 `cpp/CMakeLists.txt`**
 
 ```cmake
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -112,7 +134,7 @@ target_include_directories(mcyopus PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/opus/incl
 target_link_libraries(mcyopus PRIVATE opus libace_napi.z.so libhilog_ndk.z.so)
 ```
 
-- [ ] **Step 2: 写 `cpp/napi_init.cpp`**
+- [x] **Step 2: 写 `cpp/napi_init.cpp`**
 
 GPL 头块（同现有 `.ets`，版权年份照抄）之后：
 
@@ -266,7 +288,7 @@ extern "C" __attribute__((constructor)) void RegisterMcyopusModule() {
 
 上面代码即最终形态，不需要额外修正。
 
-- [ ] **Step 3: 写类型与包声明**
+- [x] **Step 3: 写类型与包声明**
 
 `cpp/types/libmcyopus/index.d.ts`：
 
@@ -287,7 +309,7 @@ export function destroyEncoder(handle: number): void;
 }
 ```
 
-- [ ] **Step 4: 接线构建配置**
+- [x] **Step 4: 接线构建配置**
 
 `entry/oh-package.json5` 的 `dependencies` 加：
 
@@ -311,7 +333,7 @@ export function destroyEncoder(handle: number): void;
 
 （若 `buildOption` 已存在则并入，不重复键。`arguments` 留空：编码选项固定在 CMakeLists 里 FORCE。）
 
-- [ ] **Step 5: 构建验证**
+- [x] **Step 5: 构建验证**
 
 ```bash
 cd /home/zhh7ce/Documents/codes/MicYou-HarmonyOS
@@ -327,7 +349,7 @@ unzip -l entry/build/default/outputs/default/entry-default-signed.hap | grep lib
 - OHOS 下 opus 的 `check_include_file(unistd.h)` 类探测报错 → 在 `entry/src/main/cpp/opus/CMakeLists.txt` 对应判断处补 `OR CMAKE_SYSTEM_NAME STREQUAL "OHOS"`，改动保存为 `entry/src/main/cpp/opus-micyou-ohos.patch`（`git diff` 生成）随本任务提交。
 - 不得通过删校验或放宽 CMake 选项来"修好"构建。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add entry/src/main/cpp entry/oh-package.json5 build-profile.example.json5
@@ -358,7 +380,7 @@ git commit -m "feat: add mcyopus napi module wrapping the vendored libopus encod
   ```
   Opus 数据包**不加新函数**：现有 `encodeAudioPacket(..., codec)` 传 opus 字节 + `CODEC_OPUS` 即可（spec §2）。
 
-- [ ] **Step 1: 先写失败验证脚本**
+- [x] **Step 1: 先写失败验证脚本**
 
 ```bash
 mkdir -p /tmp/micyou-proto-verify && cd /tmp/micyou-proto-verify
@@ -410,7 +432,7 @@ if (p2.fecPacketLengths.length !== 12) throw new Error('12 lengths');
 console.log('PROTO OK: parity + data + group12');
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 node --experimental-strip-types parity.test.mts
@@ -418,7 +440,7 @@ node --experimental-strip-types parity.test.mts
 
 预期 FAIL：`encodeFecParityPacket is not a function`（`writePackedUInt32s` 同不存在）。
 
-- [ ] **Step 3: 实现 PbWriter.writePackedUInt32s**
+- [x] **Step 3: 实现 PbWriter.writePackedUInt32s**
 
 `net/Pb.ets`，`writeBytes` 之后（`:114` 附近）加：
 
@@ -440,7 +462,7 @@ node --experimental-strip-types parity.test.mts
   }
 ```
 
-- [ ] **Step 4: 实现 encodeFecParityPacket**
+- [x] **Step 4: 实现 encodeFecParityPacket**
 
 `net/Messages.ets`：常量区加（注释同步改写第 115-116 行的旧说明——fec 字段从此有生产者）：
 
@@ -486,7 +508,7 @@ export function encodeFecParityPacket(xor: Uint8Array, lengths: Array<number>, g
 }
 ```
 
-- [ ] **Step 5: 运行 harness 确认通过**
+- [x] **Step 5: 运行 harness 确认通过**
 
 ```bash
 cp /home/zhh7ce/Documents/codes/MicYou-HarmonyOS/entry/src/main/ets/net/Pb.ets pb.ts
@@ -497,7 +519,7 @@ node --experimental-strip-types parity.test.mts
 
 预期 `PROTO OK: parity + data + group12`。（`Wire.ets` 被 Messages import：同样拷入并把 `'./Wire'` 改成 `'./wire.ts'`。）
 
-- [ ] **Step 6: ArkTS 编译 + 既有 PCM 回归**
+- [x] **Step 6: ArkTS 编译 + 既有 PCM 回归**
 
 ```bash
 cd /home/zhh7ce/Documents/codes/MicYou-HarmonyOS
@@ -506,7 +528,7 @@ hvigorw assembleHap --no-daemon
 
 预期构建成功（`encodeFecParityPacket` 尚无调用者，编译过即可）。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add entry/src/main/ets/net/Pb.ets entry/src/main/ets/net/Messages.ets
@@ -554,7 +576,7 @@ git commit -m "feat: encode out-of-band XOR FEC parity packets on the wire"
   }
   ```
 
-- [ ] **Step 1: Wire.ets 加常量**
+- [x] **Step 1: Wire.ets 加常量**
 
 ```ets
 export const OPUS_FRAME_MS: number = 20;
@@ -577,7 +599,7 @@ export function isOpusNativeRate(rate: number): boolean {
 }
 ```
 
-- [ ] **Step 2: 写两个实现类**
+- [x] **Step 2: 写两个实现类**
 
 `audio/OpusFrameBuffer.ets`（GPL 头块后）：
 
@@ -689,7 +711,7 @@ export class FecGroup {
 }
 ```
 
-- [ ] **Step 3: 写单元 harness（失败优先）**
+- [x] **Step 3: 写单元 harness（失败优先）**
 
 ```bash
 mkdir -p /tmp/micyou-units && cd /tmp/micyou-units
@@ -748,7 +770,7 @@ if (parity !== null) {
 
 期望值手算依据：11 个 `[0xff, 0x0f]` + 1 个 `[0x0f]`——byte0 有奇数个 0xff 得 `0xff`，再异或 b 的 byte0 `0x0f` 得 `0xf0`；byte1 有奇数个 0x0f 得 `0x0f`（b 在 byte1 处按零填充，不翻转结果），故 `xor = [0xf0, 0x0f]`。断言即按此写出，不留注释。
 
-- [ ] **Step 4: 运行 harness**
+- [x] **Step 4: 运行 harness**
 
 ```bash
 node --experimental-strip-types units.test.mts
@@ -756,7 +778,7 @@ node --experimental-strip-types units.test.mts
 
 预期 PASS（若 Step 2 先于 Step 3 写完，可先对旧行为空实现跑一次红，再实现跑绿——顺序不豁免，红必须见过一次）。
 
-- [ ] **Step 5: ArkTS 编译**
+- [x] **Step 5: ArkTS 编译**
 
 ```bash
 cd /home/zhh7ce/Documents/codes/MicYou-HarmonyOS && hvigorw assembleHap --no-daemon
@@ -764,7 +786,7 @@ cd /home/zhh7ce/Documents/codes/MicYou-HarmonyOS && hvigorw assembleHap --no-dae
 
 预期成功（两类尚无调用者）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add entry/src/main/ets/net/Wire.ets entry/src/main/ets/audio/OpusFrameBuffer.ets entry/src/main/ets/audio/FecGroup.ets
@@ -797,7 +819,7 @@ git commit -m "feat: frame accumulation and XOR FEC grouping for the opus send p
   private opusMode: boolean;
   ```
 
-- [ ] **Step 1: 写 OpusBridge.ets**
+- [x] **Step 1: 写 OpusBridge.ets**
 
 GPL 头块后：
 
@@ -833,7 +855,7 @@ export class OpusBridge {
 }
 ```
 
-- [ ] **Step 2: 控制器接入 Opus 分支**
+- [x] **Step 2: 控制器接入 Opus 分支**
 
 `MicYouController.ets`：
 
@@ -917,13 +939,13 @@ this.encoder.destroy();
 
 `start()` 里 `this.sequence = 0;` 旁（`:110`）加 `this.opusMode = false; this.fecGroup.reset(); this.frameBuffer.reset(); this.encoder.destroy();`（防上个会话异常残留；`destroy()` 对空句柄是 no-op）。
 
-- [ ] **Step 3: 编译**
+- [x] **Step 3: 编译**
 
 ```bash
 hvigorw assembleHap --no-daemon
 ```
 
-- [ ] **Step 4: 真机首流冒烟**
+- [x] **Step 4: 真机首流冒烟**
 
 桌面侧（另一个终端，`../MicYou/tauri-app`）：`cargo run -p micyou-cli -- serve`。
 
@@ -941,7 +963,7 @@ $HDC shell "aa start -b com.zhh7ce.micyou.hmos -a EntryAbility"
 
 codec 切回 PCM，再跑一次 FAB 会话，确认与之前行为一致（1320 B 分片、~73 包/s）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add entry/src/main/ets/audio/OpusBridge.ets entry/src/main/ets/app/MicYouController.ets entry/src/main/ets/pages/SettingsView.ets
