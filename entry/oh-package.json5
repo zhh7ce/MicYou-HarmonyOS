@@ -5,6 +5,8 @@
   "main": "",
   "author": "zhh7ce",
   "license": "GPL-3.0-or-later",
-  "dependencies": {}
+  "dependencies": {
+    "libmcyopus.so": "file:./src/main/cpp/types/libmcyopus"
+  }
 }
 

@@ -1,0 +1,6 @@
+{
+  "name": "libmcyopus.so",
+  "types": "./index.d.ts",
+  "version": "1.0.0",
+  "description": "napi bridge exposing the vendored libopus encoder to MicYou"
+}
