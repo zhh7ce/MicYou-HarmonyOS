@@ -64,7 +64,7 @@ entry/src/main/cpp/
 
 需要 DevEco Studio 或 Command Line Tools + HarmonyOS SDK。本机 SDK 为 26.0.0（API 26），项目 `compatibleSdkVersion` 保持 5.0.0(12)，成员 `@since` 高于 12 的 API 通过 `deviceInfo.sdkApiVersion` 在运行时门控，而不是把基线拉高。
 
-首次构建前有一条前置：libopus 是 git 子模块，先 `git submodule update --init`（`.gitmodules` → `lib/opus`，https://github.com/xiph/opus.git ，锁 v1.5.2）。native 构建由被跟踪的 `entry/build-profile.json5` 里 `externalNativeOptions` 驱动（`./src/main/cpp/CMakeLists.txt`，`abiFilters: ["arm64-v8a"]`），`arguments` 刻意留空——libopus 的编译选项写在 `CMakeLists.txt` 里并 `FORCE`，本机配置改不动实际编译内容。arm64-v8a 实测体积：`libmcyopus.so` 594,568 B，`libc++_shared.so` 1,262,504 B，签名 HAP 共 2,326,054 B。
+首次构建前有一条前置：libopus 是 git 子模块，先 `git submodule update --init`（`.gitmodules` → `lib/opus`，https://github.com/xiph/opus.git ，锁 v1.5.2）。native 构建由被跟踪的 `entry/build-profile.json5` 里 `externalNativeOptions` 驱动（`./src/main/cpp/CMakeLists.txt`，`abiFilters: ["arm64-v8a"]`），`arguments` 刻意留空——libopus 的编译选项写在 `CMakeLists.txt` 里并 `FORCE`，本机配置改不动实际编译内容。arm64-v8a 实测体积：`libmcyopus.so` 594,568 B，`libc++_shared.so` 1,262,504 B，签名 HAP 共 2,335,101 B。
 
 `build-profile.json5` 是本机签名材料，仓库不跟踪。从示例起步：
 

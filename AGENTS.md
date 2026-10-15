@@ -311,7 +311,8 @@ by the tracked `entry/build-profile.json5` `externalNativeOptions`
 empty `arguments` string — the libopus build options are `set(... CACHE BOOL "" FORCE)`
 inside `CMakeLists.txt`, so no machine-local profile can silently change what gets
 compiled. Measured in the signed HAP (arm64-v8a): `libmcyopus.so` 594,568 B,
-`libc++_shared.so` 1,262,504 B, total `entry-default-signed.hap` 2,326,054 B.
+`libc++_shared.so` 1,262,504 B, total `entry-default-signed.hap` 2,335,101 B (clean
+build at the tip of this branch).
 
 Output in `entry/build/default/outputs/default/`:
 
