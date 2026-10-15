@@ -21,6 +21,7 @@
  */
 
 import { PbReader, PbWriter, WT_FIXED32, WT_FIXED64, WT_LEN, WT_VARINT } from './Pb';
+import { CODEC_OPUS } from './Wire';
 
 const WRAPPER_AUDIO: number = 1;
 const WRAPPER_CONNECT: number = 2;
@@ -33,6 +34,11 @@ const ORDERED_SEQUENCE: number = 1;
 const ORDERED_AUDIO: number = 2;
 const ORDERED_TIMESTAMP: number = 3;
 const ORDERED_SESSION: number = 6;
+const ORDERED_FEC_BUFFER: number = 4;
+const ORDERED_FEC_SEQ: number = 5;
+const ORDERED_FEC_LENGTHS: number = 7;
+
+const FEC_MARKER: Uint8Array = new Uint8Array([1]);
 
 const AUDIO_BUFFER: number = 1;
 const AUDIO_SAMPLE_RATE: number = 2;
@@ -112,8 +118,39 @@ export function encodeAudioPacket(pcm: Uint8Array, sequence: number, timestamp: 
   ordered.writeMessage(ORDERED_AUDIO, audio.toUint8());
   ordered.writeInt(ORDERED_TIMESTAMP, timestamp);
   ordered.writeInt(ORDERED_SESSION, sessionId);
-  // fecBuffer, fecSequenceNumber and fecPacketLengths stay unset: PCM carries no
-  // parity block, which validate_audio_packet accepts when lengths are empty too.
+  // Data packets carry no FEC fields: parity lives in its own out-of-band
+  // encodeFecParityPacket frame, and validate_audio_packet accepts empty lengths.
+
+  const outer = new PbWriter();
+  outer.writeMessage(WRAPPER_AUDIO, ordered.toUint8());
+  return outer.toArrayBuffer();
+}
+
+/**
+ * Out-of-band XOR parity packet, field-for-field like Android AudioEngine.kt:956-987.
+ * The XOR body goes in audioPacket.buffer; fecBuffer is only the non-empty
+ * [0x01] marker that makes the desktop's ExplicitMarker layout detect parity.
+ * sequence is the NEXT regular packet's number, deliberately not consumed.
+ * audioFormat is the capture wire value, telemetry only for codec 1.
+ */
+export function encodeFecParityPacket(xor: Uint8Array, lengths: Array<number>, groupStartSeq: number,
+  sequence: number, timestamp: number, sessionId: number,
+  sampleRate: number, channelCount: number, audioFormat: number): ArrayBuffer {
+  const audio = new PbWriter();
+  audio.writeBytes(AUDIO_BUFFER, xor);
+  audio.writeInt(AUDIO_SAMPLE_RATE, sampleRate);
+  audio.writeInt(AUDIO_CHANNEL_COUNT, channelCount);
+  audio.writeInt(AUDIO_FORMAT, audioFormat);
+  audio.writeInt(AUDIO_CODEC, CODEC_OPUS);
+
+  const ordered = new PbWriter();
+  ordered.writeInt(ORDERED_SEQUENCE, sequence);
+  ordered.writeMessage(ORDERED_AUDIO, audio.toUint8());
+  ordered.writeInt(ORDERED_TIMESTAMP, timestamp);
+  ordered.writeBytes(ORDERED_FEC_BUFFER, FEC_MARKER);
+  ordered.writeInt(ORDERED_FEC_SEQ, groupStartSeq); // group 0 omits it; proto3 decodes 0
+  ordered.writeInt(ORDERED_SESSION, sessionId);
+  ordered.writePackedUInt32s(ORDERED_FEC_LENGTHS, lengths);
 
   const outer = new PbWriter();
   outer.writeMessage(WRAPPER_AUDIO, ordered.toUint8());

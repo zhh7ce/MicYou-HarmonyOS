@@ -113,6 +113,22 @@ export class PbWriter {
     this.pos += data.length;
   }
 
+  /** proto3 packed repeated uint32: one length-delimited field of bare varints. */
+  writePackedUInt32s(field: number, values: Array<number>): void {
+    if (values.length === 0) {
+      return;
+    }
+    const packed = new PbWriter();
+    for (let i = 0; i < values.length; i++) {
+      const value: number = values[i];
+      if (value < 0 || value > 4294967295) {
+        throw new Error(`uint32 out of range: ${value}`);
+      }
+      packed.writeVarint(value);
+    }
+    this.writeBytes(field, packed.toUint8());
+  }
+
   /** ASCII only: the wire carries nothing but the platform tag. */
   writeAscii(field: number, text: string): void {
     const bytes = new Uint8Array(text.length);
