@@ -165,6 +165,27 @@ export struct SettingsView {
     this.sampleRate = store.settings.sampleRate;
     this.audioFormat = store.settings.audioFormat;
     this.codec = store.settings.codec;
+    this.migrateForOpus(store);
+  }
+
+  /**
+   * Opus encodes only its native rates at 16-bit. The controller clamps such a
+   * stored value at session start, so showing it here would advertise a capture
+   * setting that is never in effect — rewrite it instead, on load as well as on
+   * the codec toggle.
+   */
+  private migrateForOpus(store: ConnectionStore): void {
+    if (this.codec !== CODEC_OPUS) {
+      return;
+    }
+    if (!isOpusNativeRate(this.sampleRate)) {
+      this.sampleRate = 48000;
+      store.setSampleRate(48000);
+    }
+    if (this.audioFormat !== AUDIO_FORMAT_16BIT) {
+      this.audioFormat = AUDIO_FORMAT_16BIT;
+      store.setAudioFormat(AUDIO_FORMAT_16BIT);
+    }
   }
 
   private availableSources(): Array<SourceChoice> {
@@ -249,19 +270,6 @@ export struct SettingsView {
     }
     this.codec = value;
     ConnectionStore.shared.setCodec(value);
-    if (value === CODEC_OPUS) {
-      // Migrate an already-stored choice Opus cannot encode; the controller
-      // would clamp it at session start anyway, so the UI must not keep
-      // showing a value that is not in effect.
-      if (!isOpusNativeRate(this.sampleRate)) {
-        this.sampleRate = 48000;
-        ConnectionStore.shared.setSampleRate(48000);
-      }
-      if (this.audioFormat !== AUDIO_FORMAT_16BIT) {
-        this.audioFormat = AUDIO_FORMAT_16BIT;
-        ConnectionStore.shared.setAudioFormat(AUDIO_FORMAT_16BIT);
-      }
-    }
     this.refresh();
   }
 

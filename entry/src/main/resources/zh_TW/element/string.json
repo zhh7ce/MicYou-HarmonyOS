@@ -218,7 +218,7 @@
     },
     {
       "name": "codec_opus_hint",
-      "value": "Opus 以 20 毫秒 VOIP 幀編碼並附带 FEC，取樣率與位元深度會限制到相容組合。"
+      "value": "Opus 以 20 毫秒 VOIP 幀編碼並附帶 FEC，取樣率與位元深度會限制到相容組合。"
     },
     {
       "name": "section_about",
