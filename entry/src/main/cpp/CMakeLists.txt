@@ -13,19 +13,20 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 
-# MicYou HarmonyOS client — napi bridge around the vendored libopus sources.
+# MicYou HarmonyOS client — napi bridge around the libopus git submodule.
 cmake_minimum_required(VERSION 3.16)
 project(mcyopus LANGUAGES C CXX)
 
-# Encoder options live here (not in externalNativeOptions.arguments) so the
-# gitignored build-profile never changes what gets compiled.
+# Encoder options live here (not in externalNativeOptions.arguments) so a
+# machine-local build profile can never change what gets compiled.
 set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
 set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(opus)
+# lib/opus is at the repository root, one level above the entry module.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../lib/opus ${CMAKE_BINARY_DIR}/opus)
 
 add_library(mcyopus SHARED napi_init.cpp)
 target_link_libraries(mcyopus PRIVATE opus libace_napi.z.so libhilog_ndk.z.so)
