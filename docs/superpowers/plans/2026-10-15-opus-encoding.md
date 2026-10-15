@@ -722,6 +722,7 @@ fb.feed(new Uint8Array(1320), (f) => frames.push(new Uint8Array(f)));   // 2640 
 assert.strictEqual(frames.length, 1);
 assert.strictEqual(frames[0].length, 1920);
 assert.strictEqual(fb.reset(), 720);
+fb.start(48000, 1);   // reset() zeroes frameBytes (session-stop); a new session re-arms with start()
 fb.feed(new Uint8Array(3840), (f) => frames.push(new Uint8Array(f)));   // exact 2 frames
 assert.strictEqual(frames.length, 3);
 assert.strictEqual(fb.reset(), 0);
@@ -736,16 +737,16 @@ parity = fg.add(b, 12 * 1 + 10); assert.strictEqual(parity, null);
 parity = fg.add(a, 12 * 1 + 11);
 assert.ok(parity !== null);
 if (parity !== null) {
-  assert.strictEqual(parity.groupStartSeq, 13);
+  assert.strictEqual(parity.groupStartSeq, 12);
   assert.strictEqual(parity.lengths.length, 12);
   assert.strictEqual(parity.lengths[10], 1);
   assert.strictEqual(parity.xor.length, 2);
-  assert.strictEqual(parity.xor[0], 0xff);
+  assert.strictEqual(parity.xor[0], 0xf0);
   assert.strictEqual(parity.xor[1], 0x0f);
 }
 ```
 
-期望值手算依据：11 个 `[0xff, 0x0f]` + 1 个 `[0x0f]`——byte0 有奇数个 0xff 参与异或得 `0xff`，byte1 有奇数个 0x0f 得 `0x0f`（b 在 byte1 处按零填充，不翻转结果），故 `xor = [0xff, 0x0f]`。断言即按此写出，不留注释。
+期望值手算依据：11 个 `[0xff, 0x0f]` + 1 个 `[0x0f]`——byte0 有奇数个 0xff 得 `0xff`，再异或 b 的 byte0 `0x0f` 得 `0xf0`；byte1 有奇数个 0x0f 得 `0x0f`（b 在 byte1 处按零填充，不翻转结果），故 `xor = [0xf0, 0x0f]`。断言即按此写出，不留注释。
 
 - [ ] **Step 4: 运行 harness**
 
