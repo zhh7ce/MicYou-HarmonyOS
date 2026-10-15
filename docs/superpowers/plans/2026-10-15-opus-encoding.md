@@ -4,9 +4,9 @@
 
 **Goal:** 给 MicYou HarmonyOS 客户端加端侧 Opus 编码（libopus 1.5.2 经 NDK 静态内嵌 napi 模块），20 ms VOIP 帧 + VBR/DTX + 带外 XOR FEC，并在设置页启用 Opus 且置灰不兼容采集参数。
 
-**Architecture:** 方案甲——napi 只做单帧编码（createEncoder/encode/destroyEncoder），凑帧（OpusFrameBuffer）、FEC 分组（FecGroup）、序号与线格式全在 ArkTS；CapturePump/AudioSender/ConnectionStore 零改动。奇偶包逐字段对齐 Android `AudioEngine.kt:940-988`。
+**Architecture:** 方案甲——napi 只做单帧编码（createEncoder/encode/destroyEncoder），凑帧（OpusFrameBuffer）、FEC 分组（FecGroup）、序号与线格式全在 ArkTS；CapturePump/AudioSender/ConnectionStore 零改动（执行期 CapturePump 另有一处与本计划无关的 stop() 丢尾修复，见执行进度）。奇偶包逐字段对齐 Android `AudioEngine.kt:940-988`。
 
-**Tech Stack:** ArkTS（严格模式）、HarmonyOS NDK（C++/napi）、CMake、libopus 1.5.2（BSD-3，源码进仓）、hvigor 6.26.2。
+**Tech Stack:** ArkTS（严格模式）、HarmonyOS NDK（C++/napi）、CMake、libopus 1.5.2（BSD-3，`lib/opus` git 子模块锁 tag）、hvigor 6.26.2。
 
 **Spec:** `docs/superpowers/specs/2026-10-15-opus-encoding-design.md`（执行时先读它，本计划以它为准）
 
@@ -14,21 +14,22 @@
 
 工作区：git worktree `.worktrees/opus-encoding`，分支 `opus-encoding`（主目录仍在 `master`，未受影响）。提交均未 push。
 
-已完成（含逐步审查，审查结论记在 `.superpowers/sdd/2026-10-15-opus-encoding/progress.md`，该目录 gitignore）：
+已完成（提交号以重写后的分支为准；逐步审查结论记在 `.superpowers/sdd/2026-10-15-opus-encoding/progress.md`，该目录 gitignore）：
 
-- Task 1 `ff38229`：libopus 1.5.2 源码进仓，与上游 tarball 逐字节一致（475 文件，含 `COPYING`）
-- Task 2 `d5cad6d` + `44e671c`：napi 模块 `libmcyopus.so`（VOIP/20 ms/VBR/DTX/INBAND_FEC=0/SIGNAL=VOICE），编进签名 HAP，arm64 `.so` 595,432 B，另带 `libc++_shared.so` 1,262,504 B；`.gitignore` 补 `**/oh_modules` 并跟踪 `entry/oh-package-lock.json5`
-- Task 3 `14035ac`：`PbWriter.writePackedUInt32s` + `encodeFecParityPacket`，protobufjs 对着真 `network.proto` 跑通往返（含奇偶包、数据包不泄漏 FEC 字段、第 12 组起始号）
-- Task 4 `bfdc39d` + `b952d4b`：`OpusFrameBuffer`、`FecGroup`、`Wire` 的 20 ms/FEC 常量；node harness 绿（三处 brief 测试笔误已在本文件修正：`xor[0]=0xf0`、`groupStartSeq=12`、reset 后需重新 `start()`）
-- Task 5 `dc6446a`：`OpusBridge` + 控制器 Opus 数据路径 + 设置页放开 Opus 芯片；真机首流通过（nova 14 Pro：`capture active 48000 Hz / 1 ch / fmt 2 / src 7`、`createEncoder rate=48000 ch=1`、停止时 `dropped 1080 tail bytes` 后 `destroyEncoder`），桌面 GUI 收流且音质由用户确认正常；手机端上行实测约 10.6 KB/s（PCM 约 97 KB/s）
+- Task 1：libopus 1.5.2 入仓。原按 tarball 解包成 `entry/src/main/cpp/opus/`（475 文件，与上游逐字节一致），执行后期按用户要求改为 `lib/opus` git 子模块锁 tag `v1.5.2`（gitlink `ddbe483`），见 `4acbd85`。**新克隆必须先 `git submodule update --init`，否则 native configure 失败。** git 历史里那个 vendoring 提交已重放丢弃，`git log --all -- entry/src/main/cpp/opus` 为空，`.git` 由 21M 降到 5.9M；代价是 `4acbd85` 之前的分支提交单独 checkout 无法完成 native configure（树中无 opus 源码），bisect 时注意
+- Task 2 `90020d7` + `f3794b9`：napi 模块 `libmcyopus.so`（VOIP/20 ms/VBR/DTX/INBAND_FEC=0/SIGNAL=VOICE），编进签名 HAP，arm64 strip 后 `libmcyopus.so` 594,568 B，另带 `libc++_shared.so` 1,262,504 B；`.gitignore` 补 `**/oh_modules` 并跟踪 `entry/oh-package-lock.json5`
+- Task 3 `aba00ba`：`PbWriter.writePackedUInt32s` + `encodeFecParityPacket`，protobufjs 对着真 `network.proto` 跑通往返（含奇偶包、数据包不泄漏 FEC 字段、第 12 组起始号）
+- Task 4 `e502ece` + `9514e70`：`OpusFrameBuffer`、`FecGroup`、`Wire` 的 20 ms/FEC 常量；node harness 绿（三处 brief 测试笔误已在本文件修正：`xor[0]=0xf0`、`groupStartSeq=12`、reset 后需重新 `start()`）
+- Task 5 `56fdd3f`：`OpusBridge` + 控制器 Opus 数据路径 + 设置页放开 Opus 芯片；真机首流通过（nova 14 Pro：`capture active 48000 Hz / 1 ch / fmt 2 / src 7`、`createEncoder rate=48000 ch=1`、停止时 `dropped 1080 tail bytes` 后 `destroyEncoder`），桌面 GUI 收流且音质由用户确认正常；手机端上行实测约 10.6 KB/s（PCM 约 97 KB/s）
+- Task 5 审查（含 `4acbd85` 子模块重构，reviewer 判 Needs fixes，两条 Important 已处理）：`5d437d9` 修 `CapturePump.stop()` 先把 sink 置空再 `flush()`，尾部 flush 实为死代码（每次停止最多丢一个 payload，PCM/Opus  alike）；`d678a82` 修 native 构建注释把 `entry/build-profile.json5`（已跟踪）说成机器本地文件。reviewer 在 start/stop/onBroken 全路径核对过分序号与编码器句柄：序号只在真正发包时消耗，native `encode` 抛异常发生在自增之前，`pump.stop()` 的 `off('readData')` 先于 `destroy`，且 reset 后 `frameBytes <= 0` 早退——无失步、无泄漏
 
 未完成：
 
-- Task 5 Step 5：PCM 回归未在本机复测（PCM 分支代码未改动）
-- Task 5 的独立任务审查（task reviewer）未派发；其余四个任务都已审过并通过
+- Task 5 Step 5：PCM 回归未在本机复测（PCM 分支代码未改动，但 `5d437d9` 改了 stop() 顺序，需在真机一并确认）
+- 子模块重构后的 Opus 真机复验（源码与 tarball 字节一致，构建产物已核，尚未在手机上重跑一次）
 - Task 6：FEC 奇偶包接线（`fecGroup.add` 返回值消费、奇偶包占用下一个序号但不推进、每组 12 包与 1..1320 长度上限由生产方保证）
 - Task 7：设置页按 Opus 置灰不兼容采样率/位深 + 切到 Opus 时把已存的不兼容值迁移到 48 kHz/16-bit
-- Task 8：文档更新（独立 commit），需带上 Task 2/5 的体积与带宽数字
+- Task 8：文档更新（独立 commit），需带上 Task 2/5 的体积与带宽数字，以及 `git submodule update --init` 的克隆前置
 - Task 9：全量回归清单（含 `net/Pb.ets` 变更后重跑 protobufjs harness）
 - 收尾：分支合并/推送由用户决定
 
@@ -51,6 +52,8 @@
 ---
 
 ### Task 1: 引入 libopus 1.5.2 源码
+
+> 已作废的落地方式：本任务按 tarball 解包进 `entry/src/main/cpp/opus/` 执行并通过审查，后被 `4acbd85` 换成 `lib/opus` git 子模块（锁 `v1.5.2`）。下面的路径与 include 布局描述的是 tarball 版，现行事实以顶部「执行进度」为准。
 
 **Files:**
 - Create: `entry/src/main/cpp/opus/`（上游解包全树，含 `COPYING`）
