@@ -50,6 +50,25 @@ export const SOURCE_CAMCORDER: number = 13;
 export const SOURCE_UNPROCESSED: number = 14;
 export const SOURCE_LIVE: number = 17;
 
+export const OPUS_FRAME_MS: number = 20;
+export const FEC_GROUP_SIZE: number = 12;
+const OPUS_NATIVE_RATES: Array<number> = [8000, 12000, 16000, 24000, 48000];
+
+/** Samples per channel in one MicYou Opus frame at this capture rate. */
+export function opusFrameSamples(sampleRate: number): number {
+  return Math.floor(sampleRate * OPUS_FRAME_MS / 1000);
+}
+
+/** One 20 ms S16LE frame for (rate, channels), the exact input size opus_encode wants. */
+export function opusFrameBytes(sampleRate: number, channels: number): number {
+  return opusFrameSamples(sampleRate) * 2 * channels;
+}
+
+/** Rates the desktop's opus decoder can be created for; anything else is a silent-stream trap. */
+export function isOpusNativeRate(rate: number): boolean {
+  return OPUS_NATIVE_RATES.indexOf(rate) >= 0;
+}
+
 /** Bytes in one interleaved PCM frame component for a wire audioFormat constant. */
 export function bytesPerSampleFor(format: number): number {
   if (format === AUDIO_FORMAT_FLOAT32) {
