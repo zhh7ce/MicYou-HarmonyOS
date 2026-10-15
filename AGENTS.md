@@ -57,7 +57,9 @@ target; the manual `TextInput` pair overrides the selection.
 1. If already Connecting/Streaming, return. Reset `stopping=false`,
    `manuallyStopped=false`. **Fresh `ControlClient` and `AudioSender` instances are
    constructed every session** (a HarmonyOS `TCPSocket`/`UDPSocket` cannot be
-   re-connect()/bind()-ed once closed). `sessionCounter += 1`, `sequence = 0`
+   re-connect()/bind()-ed once closed). `sessionCounter += 1`, `sequence = 0`, and any
+   encoder/frame-buffer/FEC residue from a session that ended abnormally is discarded
+   (`destroy()` on an already-empty encoder handle is a no-op)
 2. Phase → `Connecting`
 3. `ensureMicrophone(context)` — denied → phase `Failed`, return
 4. Wire `control.onInbound` / `control.onClosed` callbacks
@@ -90,8 +92,9 @@ slice to `MicYouController.onPcm`, and computes a linear RMS on the correct PCM 
 (int16 / int24 packed / float32) for `onLevel`; the controller throttles snapshot
 republishing to `LEVEL_PUBLISH_INTERVAL_MS = 100`. PCM mode encodes each slice
 straight into an `OrderedAudioPacket` via `encodeAudioPacket(payload, seq, Date.now(),
-sessionId, capSampleRate, capChannels, capFormat, CODEC_PCM)` and sends it. Opus mode
-feeds the slices to `OpusFrameBuffer`, which accumulates them into whole 20 ms S16LE
+sessionId, capSampleRate, capChannels, capFormat, capCodec)` — `capCodec` holding
+`CODEC_PCM` on this path — and sends it. Opus mode feeds the slices to
+`OpusFrameBuffer`, which accumulates them into whole 20 ms S16LE
 frames (1320 does not divide 1920, so a remainder is carried across calls); each frame
 goes through `OpusBridge.encode` (native `opus_encode`) and is sent as an
 `OrderedAudioPacket` with `codec = CODEC_OPUS`. Every encoded packet is also handed to
