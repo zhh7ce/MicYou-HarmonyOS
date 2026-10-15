@@ -12,6 +12,8 @@
 /.clang-tidy
 **/.test
 /.appanalyzer
+# IDE-local cmake.sourceDirectory pointing at lib/opus
+/.vscode/
 /entry/patch.json
 /research
 /.worktrees
