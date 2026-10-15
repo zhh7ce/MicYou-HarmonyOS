@@ -26,10 +26,10 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 import { AudioSender } from '../net/AudioSender';
 import { ControlClient } from '../net/ControlClient';
-import { encodeAudioPacket, InboundKind, InboundMessage } from '../net/Messages';
+import { encodeAudioPacket, encodeFecParityPacket, InboundKind, InboundMessage } from '../net/Messages';
 import { udpPortFor, CODEC_PCM, CODEC_OPUS, AUDIO_FORMAT_16BIT, isOpusNativeRate } from '../net/Wire';
 import { CaptureApplied, CaptureConfig, CapturePump } from '../audio/CapturePump';
-import { FecGroup } from '../audio/FecGroup';
+import { FecGroup, FecParity } from '../audio/FecGroup';
 import { OpusBridge } from '../audio/OpusBridge';
 import { OpusFrameBuffer } from '../audio/OpusFrameBuffer';
 import { BackgroundRunner } from './BackgroundRunner';
@@ -234,8 +234,14 @@ export class MicYouController {
       this.capSampleRate, this.capChannels, this.capFormat, CODEC_OPUS);
     this.audioOut.send(new Uint8Array(data));
     this.snapshot.packetsSent += 1;
-    // FEC 消费在 Task 6；这里先返回值丢弃。
-    this.fecGroup.add(packet, seq);
+    const parity: FecParity | null = this.fecGroup.add(packet, seq);
+    if (parity !== null) {
+      const fecFrame: ArrayBuffer = encodeFecParityPacket(parity.xor, parity.lengths, parity.groupStartSeq,
+        this.sequence, Date.now(), sessionId, this.capSampleRate, this.capChannels, this.capFormat);
+      this.audioOut.send(new Uint8Array(fecFrame));
+      // parity reuses this.sequence WITHOUT incrementing it (Android AudioEngine.kt:970-972).
+      this.snapshot.packetsSent += 1;
+    }
   }
 
   private onLevel(level: number): void {
