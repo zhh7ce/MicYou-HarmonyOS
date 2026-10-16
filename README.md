@@ -158,6 +158,8 @@ hvigorw assembleHap --no-daemon
 
 ## 如何参与
 
+这个项目完全由 AI 提出并编写，我只控制整体方向，本人没有移动端开发经验。因此如果你发现问题或有好想法，欢迎在 Issue 里提出来，我会考虑怎么改进。
+
 环境准备、构建与签名、代码风格、提交规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；装机调试与真机验证的具体命令见 [`AGENTS.md`](AGENTS.md) 的 "Debug loop"。回归测试在 `test/`，无人值守层直接跑 `test/run.sh --auto`，需要人观察的一层跑 `test/run.sh --human`；ArkTS 侧仍然没有单元测试，一次干净构建是最低门槛。
 
 问题反馈用仓库的 issue 模板（`.github/ISSUE_TEMPLATE/`）：bug 模板会要求填手机型号、应用版本、桌面端版本、采集设置和 `MicYouEngine` / `MicYouControl` / `MicYouCapture` 三个 tag 的日志片段；涉及线协议字段的请求请在 issue 里先说明，因为这类改动要桌面端和安卓端一起跟。
